@@ -1,7 +1,7 @@
 name: heroes_del_corazon_pabon
 
 # Production (run from this folder): docker compose -f docker-compose.prod.yml up -d --build
-# Required variables (in a .env next to this file or exported): see .env.example.
+# Required variables are read from the untracked .env beside this file.
 # Bind the host port to loopback; expose the API only through a trusted TLS reverse proxy.
 services:
   db:

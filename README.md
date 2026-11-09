@@ -26,7 +26,7 @@ El backend corre dentro de Docker en el flujo recomendado; no es necesario insta
 
 ## Inicio en desarrollo
 
-1. Copiar `backend/.env.example` a `backend/.env` si se necesitan valores locales personalizados. Compose tiene valores de desarrollo predeterminados; nunca reutilizar esos valores en producción.
+1. Configurar `backend/.env` con las variables de backend descritas en la sección [Configuración](#configuración). Este archivo local no se versiona; los valores actuales son solo para desarrollo y no se deben usar en producción.
 2. Iniciar API, base de datos y Mailpit:
 
    ```powershell
@@ -56,7 +56,7 @@ docker compose exec backend python manage.py createsuperuser
 
 ## Configuración
 
-Los ejemplos de variables están en `backend/.env.example` y `frontend/.env.example`.
+Docker Compose lee `backend/.env` y Vite lee `frontend/.env` automáticamente. Ambos archivos son locales y están excluidos de Git; cada entorno debe aprovisionarlos por separado. El backend necesita `DJANGO_SECRET_KEY`, `DJANGO_DEBUG`, `DJANGO_ALLOWED_HOSTS`, `POSTGRES_DB`, `POSTGRES_USER`, `POSTGRES_PASSWORD`, `POSTGRES_HOST`, `POSTGRES_PORT`, `CHANNELS_REDIS_URL`, `FRONTEND_BASE_URL`, `CORS_ALLOWED_ORIGINS` y `CSRF_TRUSTED_ORIGINS`. Para correo, configurar `EMAIL_BACKEND`, `EMAIL_HOST`, `EMAIL_PORT`, `EMAIL_USE_TLS`, `EMAIL_HOST_USER`, `EMAIL_HOST_PASSWORD` y `DEFAULT_FROM_EMAIL`; en desarrollo con Mailpit, las credenciales SMTP pueden quedar vacías. Los puertos locales opcionales son `API_PORT`, `DB_PORT` y `MAILPIT_UI_PORT`. Vite requiere `VITE_API_URL`; las variables `VITE_*` se incorporan al código enviado al navegador y nunca deben contener credenciales ni secretos.
 
 Variables importantes del backend:
 
@@ -313,7 +313,7 @@ Las rutas del menú se configuran en `components/Layout.jsx`; al agregar una pan
 
 ### Compilación y variables
 
-`frontend/.env.example` contiene `VITE_API_URL`, el origen del backend usado por el proxy de Vite. Las variables `VITE_*` se incorporan al bundle y son visibles en el navegador; nunca poner secretos en ellas. En producción, el servidor web debe entregar el directorio `dist/` y reenviar `/api/` al servicio Django.
+`frontend/.env` define `VITE_API_URL`, el origen del backend usado por el proxy de Vite. Las variables `VITE_*` se incorporan al bundle y son visibles en el navegador; nunca poner secretos en ellas. En producción, el servidor web debe entregar el directorio `dist/` y reenviar `/api/` al servicio Django.
 
 Los scripts disponibles están en `frontend/package.json`:
 
@@ -340,7 +340,7 @@ Antes de actualizar un ambiente con datos, obtener y verificar una copia de segu
 
 ## Despliegue
 
-`backend/docker-compose.prod.yml` define PostgreSQL y el backend Django/Gunicorn. Antes de levantarlo, definir las variables obligatorias indicadas en ese archivo y en `.env.example`, incluyendo `DJANGO_SECRET_KEY` de al menos 50 caracteres, contraseñas seguras, hosts permitidos, dominio del sitio y configuración SMTP. La configuración de producción fuerza `DEBUG=False`, HTTPS y cookies seguras.
+`backend/docker-compose.prod.yml` define PostgreSQL y el backend Django/Gunicorn. Antes de levantarlo, aprovisionar `backend/.env` con credenciales privadas y configuración real del ambiente: `DJANGO_SECRET_KEY` aleatoria de al menos 50 caracteres, contraseñas seguras, hosts permitidos, dominio del sitio y configuración SMTP. Compose lee ese archivo automáticamente. No subirlo a Git ni reutilizar los valores locales de desarrollo. La configuración de producción fuerza `DEBUG=False`, HTTPS y cookies seguras.
 
 El puerto del backend se publica solo en `127.0.0.1` del host para que un proxy TLS local pueda acceder a Gunicorn sin exponerlo directamente a Internet. Si el proxy corre en otro contenedor o servidor, usar una red privada y no publicar el puerto del backend en una interfaz pública; el proxy debe sobrescribir `X-Forwarded-Proto`.
 
