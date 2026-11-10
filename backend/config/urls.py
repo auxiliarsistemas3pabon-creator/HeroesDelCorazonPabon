@@ -15,6 +15,7 @@ Including another URLconf
     2. Add a URL to urlpatterns:  path('blog/', include('blog.urls'))
 """
 from django.contrib import admin
+from django.conf import settings
 from django.urls import include, path
 
 # Ambas apps comparten el prefijo api/v1/; sus rutas no deben chocar entre si.
@@ -23,3 +24,8 @@ urlpatterns = [
     path('api/v1/', include('users.urls')),
     path('api/v1/', include('questions.urls')),
 ]
+
+# Debug Toolbar's middleware renders links in HTML responses, so its namespace
+# must exist whenever development settings install the toolbar.
+if settings.DEBUG and "debug_toolbar" in settings.INSTALLED_APPS:
+    urlpatterns = [path("__debug__/", include("debug_toolbar.urls")), *urlpatterns]
