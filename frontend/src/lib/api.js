@@ -37,6 +37,12 @@ export function errorMessage(error, fallback = 'Ocurrió un error') {
 // Petición sin reintentos. Lanza Error con `status` y `data` (cuerpo JSON del error) para errorMessage.
 // `body` puede ser objeto (se serializa a JSON) o FormData (subida de archivos).
 async function send(path, { method = 'GET', body } = {}) {
+  if (import.meta.env.PROD && !API_ORIGIN) {
+    throw Object.assign(new Error('VITE_API_URL no está configurada.'), {
+      data: { detail: 'Falta configurar VITE_API_URL en Vercel con la URL del backend de Render.' },
+    })
+  }
+
   const headers = {}
   const isForm = body instanceof FormData // archivos: el navegador pone el Content-Type con su boundary
   if (body !== undefined && !isForm) headers['Content-Type'] = 'application/json'

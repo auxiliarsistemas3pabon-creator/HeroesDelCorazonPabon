@@ -16,10 +16,17 @@ Including another URLconf
 """
 from django.conf import settings
 from django.contrib import admin
+from django.http import JsonResponse
 from django.urls import include, path
+
+
+def health_check(request):
+    """Simple liveness response for Render and container health probes."""
+    return JsonResponse({"status": "ok"})
 
 # Ambas apps comparten el prefijo api/v1/; sus rutas no deben chocar entre si.
 urlpatterns = [
+    path('', health_check, name='health-check'),
     path('admin/', admin.site.urls),
     path('api/v1/', include('users.urls')),
     path('api/v1/', include('questions.urls')),
