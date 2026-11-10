@@ -64,8 +64,8 @@ Variables importantes del backend:
 - `DJANGO_SETTINGS_MODULE`: `config.settings.dev` en desarrollo y `config.settings.prod` en producción.
 - `DJANGO_SECRET_KEY`: clave secreta de Django; usar una clave privada fuerte en cada ambiente.
 - `DJANGO_ALLOWED_HOSTS`: hosts válidos para Django.
-- `DATABASE_ENGINE`: motor Django. El Compose actual usa `postgresql`; SQL Server queda disponible para la migración posterior.
-- `SQLSERVER_DB`, `SQLSERVER_USER`, `SQLSERVER_PASSWORD`, `SQLSERVER_HOST`, `SQLSERVER_PORT`, `SQLSERVER_DRIVER`: conexión local a SQL Server. El host predeterminado es `host.docker.internal` y el puerto `1433`.
+- `DATABASE_ENGINE`: motor Django. El valor predeterminado es `mssql`; los ambientes PostgreSQL deben indicar `postgresql` explícitamente.
+- `SQLSERVER_DB`, `SQLSERVER_USER`, `SQLSERVER_PASSWORD`, `SQLSERVER_HOST`, `SQLSERVER_PORT`, `SQLSERVER_DRIVER`: conexión a SQL Server. Localmente el host suele ser `host.docker.internal` y el puerto `1433`.
 - `POSTGRES_DB`, `POSTGRES_USER`, `POSTGRES_PASSWORD`: conexión de origen, solo necesaria para la transferencia inicial desde el volumen PostgreSQL existente.
 - `FRONTEND_BASE_URL`, `CORS_ALLOWED_ORIGINS`, `CSRF_TRUSTED_ORIGINS`: origen del sitio y política del navegador.
 - `EMAIL_HOST`, `EMAIL_PORT`, `EMAIL_USE_TLS`, `EMAIL_HOST_USER`, `EMAIL_HOST_PASSWORD`, `DEFAULT_FROM_EMAIL`: salida de correos. Desarrollo usa Mailpit.
@@ -354,6 +354,8 @@ Antes de actualizar un ambiente con datos, obtener y verificar una copia de segu
 ## Despliegue
 
 `backend/docker-compose.prod.yml` define PostgreSQL y el backend Django/Gunicorn. Antes de levantarlo, aprovisionar `backend/.env` con credenciales privadas y configuración real del ambiente: `DJANGO_SECRET_KEY` aleatoria de al menos 50 caracteres, contraseñas seguras, hosts permitidos, dominio del sitio y configuración SMTP. Compose lee ese archivo automáticamente. No subirlo a Git ni reutilizar los valores locales de desarrollo. La configuración de producción fuerza `DEBUG=False`, HTTPS y cookies seguras.
+
+En Render, configurar `DATABASE_ENGINE=mssql` y las variables `SQLSERVER_DB`, `SQLSERVER_USER`, `SQLSERVER_PASSWORD`, `SQLSERVER_HOST` y `SQLSERVER_PORT` para la instancia SQL Server accesible desde el servicio. El controlador ODBC 18 y `mssql-django` ya están incluidos en la imagen. `localhost` solo apunta al propio contenedor Render; no sirve para la instancia SQL Server de tu PC. La conexión requiere un host alcanzable desde Render y reglas de red que permitan el acceso.
 
 El puerto del backend se publica solo en `127.0.0.1` del host para que un proxy TLS local pueda acceder a Gunicorn sin exponerlo directamente a Internet. Si el proxy corre en otro contenedor o servidor, usar una red privada y no publicar el puerto del backend en una interfaz pública; el proxy debe sobrescribir `X-Forwarded-Proto`.
 

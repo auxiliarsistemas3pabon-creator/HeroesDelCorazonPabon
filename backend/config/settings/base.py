@@ -101,9 +101,8 @@ TEMPLATES = [
 
 WSGI_APPLICATION = 'config.wsgi.application'
 
-# Database engine is selected per environment. Development Compose uses SQL Server;
-# production keeps PostgreSQL unless DATABASE_ENGINE is explicitly changed.
-DATABASE_ENGINE = os.getenv("DATABASE_ENGINE", default="postgresql").lower()
+# SQL Server is the default. Environments still running PostgreSQL must opt in explicitly.
+DATABASE_ENGINE = os.getenv("DATABASE_ENGINE", default="mssql").lower()
 if DATABASE_ENGINE in {"mssql", "sqlserver", "sql_server"}:
     DATABASES = {
         "default": {
@@ -123,18 +122,23 @@ if DATABASE_ENGINE in {"mssql", "sqlserver", "sql_server"}:
         }
     }
 elif DATABASE_ENGINE in {"postgres", "postgresql"}:
-    DATABASES = {
-        "default": {
-            "ENGINE": "django.db.backends.postgresql",
-            "NAME": os.getenv("POSTGRES_DB", default="heroesdelcorazon"),
-            "USER": os.getenv("POSTGRES_USER", default="heroes_user"),
-            "PASSWORD": os.getenv("POSTGRES_PASSWORD", default="heroes_pass"),
-            "HOST": os.getenv("POSTGRES_HOST", default="localhost"),
-            "PORT": os.getenv("POSTGRES_PORT", default="5432"),
+    database_url = os.getenv("DATABASE_URL")
+    if database_url:
+        # Render provides PostgreSQL connection details as a single URL.
+        DATABASES = {"default": env.db_url_config(database_url)}
+    else:
+        DATABASES = {
+            "default": {
+                "ENGINE": "django.db.backends.postgresql",
+                "NAME": os.getenv("POSTGRES_DB", default="heroesdelcorazon"),
+                "USER": os.getenv("POSTGRES_USER", default="heroes_user"),
+                "PASSWORD": os.getenv("POSTGRES_PASSWORD", default="heroes_pass"),
+                "HOST": os.getenv("POSTGRES_HOST", default="localhost"),
+                "PORT": os.getenv("POSTGRES_PORT", default="5432"),
+            }
         }
-    }
 else:
-    raise ValueError("DATABASE_ENGINE must be 'postgresql' or 'mssql'.")
+    raise ValueError("DATABASE_ENGINE must be 'mssql' or 'postgresql'.")
 
 # Optional read source used once by the explicit PostgreSQL-to-SQL Server transfer command.
 if os.getenv("SOURCE_POSTGRES_DB"):
