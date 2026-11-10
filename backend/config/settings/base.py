@@ -169,7 +169,7 @@ USE_I18N = True
 USE_TZ = True
 
 # STATIC / MEDIA
-STATIC_URL = 'static/'
+STATIC_URL = '/static/'
 STATIC_ROOT = BASE_DIR / 'staticfiles'
 
 # REST_FRAMEWORK CONFIG

@@ -25,7 +25,17 @@ if [ "${RUN_MIGRATIONS:-true}" = "true" ]; then
     python manage.py migrate --noinput
 fi
 
-if [ "${COLLECT_STATIC:-false}" = "true" ]; then
+# Collect static files by default in production so WhiteNoise can serve Django admin assets.
+COLLECT_STATIC_VALUE="${COLLECT_STATIC:-}"
+if [ -z "$COLLECT_STATIC_VALUE" ]; then
+    if [ "${DJANGO_SETTINGS_MODULE:-config.settings.dev}" = "config.settings.prod" ]; then
+        COLLECT_STATIC_VALUE="true"
+    else
+        COLLECT_STATIC_VALUE="false"
+    fi
+fi
+
+if [ "$COLLECT_STATIC_VALUE" = "true" ]; then
     python manage.py collectstatic --noinput
 fi
 
