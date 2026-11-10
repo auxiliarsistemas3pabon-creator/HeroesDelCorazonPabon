@@ -41,6 +41,7 @@ def api_root(request):
 urlpatterns = [
     path('', health_check, name='health-check'),
     path('admin/', admin.site.urls),
+    path('api/', api_root, name='api-alias'),
     path('api/v1/', api_root, name='api-root'),
     path('api/v1/', include('users.urls')),
     path('api/v1/', include('questions.urls')),

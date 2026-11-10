@@ -286,17 +286,23 @@ CONTENT_SECURITY_POLICY = {
     }
 }
 
-#  CORS / CSRF CONFIG
-CORS_ALLOWED_ORIGINS = env("CORS_ALLOWED_ORIGINS")
-CSRF_TRUSTED_ORIGINS = env("CSRF_TRUSTED_ORIGINS") or env("CORS_ALLOWED_ORIGINS")
+# FRONTEND
+FRONTEND_BASE_URL = os.getenv(
+    "FRONTEND_BASE_URL", default="http://127.0.0.1:5173"
+).rstrip("/")
+
+# CORS / CSRF CONFIG. Always allow the configured frontend's exact origin.
+CORS_ALLOWED_ORIGINS = list(dict.fromkeys([*env("CORS_ALLOWED_ORIGINS"), FRONTEND_BASE_URL]))
+CSRF_TRUSTED_ORIGINS = list(
+    dict.fromkeys([
+        *(env("CSRF_TRUSTED_ORIGINS") or env("CORS_ALLOWED_ORIGINS")),
+        FRONTEND_BASE_URL,
+    ])
+)
 # Credenciales (cookies httpOnly) exigen un origen concreto, nunca '*'.
 # En prod nginx unifica origen y esto no se usa; en dev Vite puede proxear
 # /api o hablar directo a :8000 (login desde localhost:5173).
 CORS_ALLOW_CREDENTIALS = True
-
-# FRONTEND 
-FRONTEND_BASE_URL = os.getenv("FRONTEND_BASE_URL", default="http://127.0.0.1:5173")
-
 
 # Email Config
 EMAIL_BACKEND = os.getenv(
