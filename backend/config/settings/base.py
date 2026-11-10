@@ -101,17 +101,51 @@ TEMPLATES = [
 
 WSGI_APPLICATION = 'config.wsgi.application'
 
-# DATABASE POSTGRES
-DATABASES = {
-    "default": {
-        "ENGINE": "django.db.backends.postgresql",
-        "NAME": os.getenv("POSTGRES_DB", default="heroesdelcorazon"),
-        "USER": os.getenv("POSTGRES_USER", default="heroes_user"),
-        "PASSWORD": os.getenv("POSTGRES_PASSWORD", default="heroes_pass"),
-        "HOST": os.getenv("POSTGRES_HOST", default="localhost"),
-        "PORT": os.getenv("POSTGRES_PORT", default="5432"),
+# Database engine is selected per environment. Development Compose uses SQL Server;
+# production keeps PostgreSQL unless DATABASE_ENGINE is explicitly changed.
+DATABASE_ENGINE = os.getenv("DATABASE_ENGINE", default="postgresql").lower()
+if DATABASE_ENGINE in {"mssql", "sqlserver", "sql_server"}:
+    DATABASES = {
+        "default": {
+            "ENGINE": "mssql",
+            "NAME": os.getenv("SQLSERVER_DB", default="heroesdelcorazon"),
+            "USER": os.getenv("SQLSERVER_USER", default="heroes_user"),
+            "PASSWORD": os.getenv("SQLSERVER_PASSWORD", default=""),
+            "HOST": os.getenv("SQLSERVER_HOST", default="localhost"),
+            "PORT": os.getenv("SQLSERVER_PORT", default="1433"),
+            "OPTIONS": {
+                "driver": os.getenv("SQLSERVER_DRIVER", default="ODBC Driver 18 for SQL Server"),
+                "extra_params": os.getenv(
+                    "SQLSERVER_EXTRA_PARAMS",
+                    default="Encrypt=yes;TrustServerCertificate=yes",
+                ),
+            },
+        }
     }
-}
+elif DATABASE_ENGINE in {"postgres", "postgresql"}:
+    DATABASES = {
+        "default": {
+            "ENGINE": "django.db.backends.postgresql",
+            "NAME": os.getenv("POSTGRES_DB", default="heroesdelcorazon"),
+            "USER": os.getenv("POSTGRES_USER", default="heroes_user"),
+            "PASSWORD": os.getenv("POSTGRES_PASSWORD", default="heroes_pass"),
+            "HOST": os.getenv("POSTGRES_HOST", default="localhost"),
+            "PORT": os.getenv("POSTGRES_PORT", default="5432"),
+        }
+    }
+else:
+    raise ValueError("DATABASE_ENGINE must be 'postgresql' or 'mssql'.")
+
+# Optional read source used once by the explicit PostgreSQL-to-SQL Server transfer command.
+if os.getenv("SOURCE_POSTGRES_DB"):
+    DATABASES["source_postgres"] = {
+        "ENGINE": "django.db.backends.postgresql",
+        "NAME": os.environ["SOURCE_POSTGRES_DB"],
+        "USER": os.getenv("SOURCE_POSTGRES_USER", default="heroes_user"),
+        "PASSWORD": os.getenv("SOURCE_POSTGRES_PASSWORD", default=""),
+        "HOST": os.getenv("SOURCE_POSTGRES_HOST", default="localhost"),
+        "PORT": os.getenv("SOURCE_POSTGRES_PORT", default="5432"),
+    }
 
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 

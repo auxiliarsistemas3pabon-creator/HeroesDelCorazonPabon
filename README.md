@@ -12,7 +12,8 @@ Este documento describe la solución para desarrollo y mantenimiento. Los requis
 | `backend/` | Django 5, Django REST Framework | API, autenticación, reglas del dominio y administración. |
 | `backend/users/` | Aplicación Django | Usuarios, roles y carga de personal. |
 | `backend/questions/` | Aplicación Django | Evaluaciones, categorías, preguntas, respuestas y reportes. |
-| PostgreSQL | PostgreSQL 16 | Persistencia. En Docker Compose usa el volumen persistente `heroes_api_postgres_data`. |
+| PostgreSQL | PostgreSQL 16 | Persistencia local y de producción. En Docker Compose usa el volumen `heroes_api_postgres_data`. |
+| SQL Server | SQL Server local | Destino previsto para una migración posterior. |
 
 En desarrollo, Vite sirve el frontend en `http://localhost:5173` y reenvía `/api` al backend. La API local se publica en `http://localhost:8001` (o el puerto indicado por `API_PORT`).
 
@@ -22,19 +23,19 @@ En desarrollo, Vite sirve el frontend en `http://localhost:5173` y reenvía `/ap
 - Node.js y npm compatibles con la versión de Vite del proyecto.
 - Git para obtener el código y mantener cambios.
 
-El backend corre dentro de Docker en el flujo recomendado; no es necesario instalar Python en el equipo para iniciarlo. Para despliegue, se requiere un servidor Linux o plataforma de contenedores, PostgreSQL persistente, HTTPS y un servicio SMTP.
+El backend corre dentro de Docker en el flujo recomendado; no es necesario instalar Python en el equipo para iniciarlo. El desarrollo y el Compose de producción usan PostgreSQL persistente, HTTPS y un servicio SMTP.
 
 ## Inicio en desarrollo
 
 1. Configurar `backend/.env` con las variables de backend descritas en la sección [Configuración](#configuración). Este archivo local no se versiona; los valores actuales son solo para desarrollo y no se deben usar en producción.
-2. Iniciar API, base de datos y Mailpit:
+2. Iniciar API, PostgreSQL y Mailpit:
 
    ```powershell
    cd backend
    docker compose up --build
    ```
 
-   Django aplica migraciones al arrancar el contenedor. Mailpit permite revisar mensajes de correo localmente en `http://localhost:8026`.
+   Django aplica migraciones a PostgreSQL al arrancar el contenedor. Mailpit permite revisar mensajes de correo localmente en `http://localhost:8026`.
 
 3. En otra terminal, iniciar el frontend:
 
@@ -56,14 +57,16 @@ docker compose exec backend python manage.py createsuperuser
 
 ## Configuración
 
-Docker Compose lee `backend/.env` y Vite lee `frontend/.env` automáticamente. Ambos archivos son locales y están excluidos de Git; cada entorno debe aprovisionarlos por separado. El backend necesita `DJANGO_SECRET_KEY`, `DJANGO_DEBUG`, `DJANGO_ALLOWED_HOSTS`, `POSTGRES_DB`, `POSTGRES_USER`, `POSTGRES_PASSWORD`, `POSTGRES_HOST`, `POSTGRES_PORT`, `CHANNELS_REDIS_URL`, `FRONTEND_BASE_URL`, `CORS_ALLOWED_ORIGINS` y `CSRF_TRUSTED_ORIGINS`. Para correo, configurar `EMAIL_BACKEND`, `EMAIL_HOST`, `EMAIL_PORT`, `EMAIL_USE_TLS`, `EMAIL_HOST_USER`, `EMAIL_HOST_PASSWORD` y `DEFAULT_FROM_EMAIL`; en desarrollo con Mailpit, las credenciales SMTP pueden quedar vacías. Los puertos locales opcionales son `API_PORT`, `DB_PORT` y `MAILPIT_UI_PORT`. Vite requiere `VITE_API_URL`; las variables `VITE_*` se incorporan al código enviado al navegador y nunca deben contener credenciales ni secretos.
+Docker Compose lee `backend/.env` y Vite lee `frontend/.env` automáticamente. Ambos archivos son locales y están excluidos de Git; cada entorno debe aprovisionarlos por separado. El desarrollo local requiere `DJANGO_SECRET_KEY`, `POSTGRES_DB`, `POSTGRES_USER`, `POSTGRES_PASSWORD`, `CHANNELS_REDIS_URL`, `FRONTEND_BASE_URL`, `CORS_ALLOWED_ORIGINS` y `CSRF_TRUSTED_ORIGINS`. Para correo, configurar `EMAIL_BACKEND`, `EMAIL_HOST`, `EMAIL_PORT`, `EMAIL_USE_TLS`, `EMAIL_HOST_USER`, `EMAIL_HOST_PASSWORD` y `DEFAULT_FROM_EMAIL`; en desarrollo con Mailpit, las credenciales SMTP pueden quedar vacías. Los puertos locales opcionales son `API_PORT`, `DB_PORT` y `MAILPIT_UI_PORT`. Vite requiere `VITE_API_URL`; las variables `VITE_*` se incorporan al código enviado al navegador y nunca deben contener credenciales ni secretos.
 
 Variables importantes del backend:
 
 - `DJANGO_SETTINGS_MODULE`: `config.settings.dev` en desarrollo y `config.settings.prod` en producción.
 - `DJANGO_SECRET_KEY`: clave secreta de Django; usar una clave privada fuerte en cada ambiente.
 - `DJANGO_ALLOWED_HOSTS`: hosts válidos para Django.
-- `POSTGRES_DB`, `POSTGRES_USER`, `POSTGRES_PASSWORD`, `POSTGRES_HOST`, `POSTGRES_PORT`: conexión a PostgreSQL.
+- `DATABASE_ENGINE`: motor Django. El Compose actual usa `postgresql`; SQL Server queda disponible para la migración posterior.
+- `SQLSERVER_DB`, `SQLSERVER_USER`, `SQLSERVER_PASSWORD`, `SQLSERVER_HOST`, `SQLSERVER_PORT`, `SQLSERVER_DRIVER`: conexión local a SQL Server. El host predeterminado es `host.docker.internal` y el puerto `1433`.
+- `POSTGRES_DB`, `POSTGRES_USER`, `POSTGRES_PASSWORD`: conexión de origen, solo necesaria para la transferencia inicial desde el volumen PostgreSQL existente.
 - `FRONTEND_BASE_URL`, `CORS_ALLOWED_ORIGINS`, `CSRF_TRUSTED_ORIGINS`: origen del sitio y política del navegador.
 - `EMAIL_HOST`, `EMAIL_PORT`, `EMAIL_USE_TLS`, `EMAIL_HOST_USER`, `EMAIL_HOST_PASSWORD`, `DEFAULT_FROM_EMAIL`: salida de correos. Desarrollo usa Mailpit.
 - `AUTH_COOKIE_SAMESITE` y `AUTH_COOKIE_SECURE`: configuración de cookies; producción fuerza cookies seguras.
@@ -72,7 +75,7 @@ No versionar archivos `.env`, claves, credenciales, copias de bases de datos ni 
 
 ## Estructura del backend
 
-- `backend/config/settings/base.py`: configuración común, PostgreSQL, DRF, JWT, seguridad y zona horaria `America/Bogota`.
+- `backend/config/settings/base.py`: configuración común, selección de PostgreSQL o SQL Server, DRF, JWT, seguridad y zona horaria `America/Bogota`.
 - `backend/config/settings/dev.py` y `prod.py`: ajustes por ambiente.
 - `backend/config/urls.py`: prefijo `/api/v1/` y administración Django.
 - `backend/users/`: usuarios, autenticación, roles, recuperación de contraseñas y carga de personal; ver [Módulo users](#modulo-users).
@@ -334,6 +337,16 @@ docker compose ps
 docker compose logs -f backend
 docker compose exec backend python manage.py migrate
 docker compose exec backend python manage.py createsuperuser
+```
+
+### Transferencia inicial de PostgreSQL a SQL Server
+
+La base de desarrollo continúa en PostgreSQL. Para la migración posterior, habilitar TCP/IP en la instancia local de SQL Server, crear una base destino vacía y un login SQL con permisos para crear tablas, y configurar `SQLSERVER_USER` y `SQLSERVER_PASSWORD` localmente. El override `docker-compose.sqlserver-migration.yml` permite hacer la transferencia sin cambiar el motor normal de desarrollo. El volumen PostgreSQL `heroes_api_postgres_data` se conserva.
+
+```powershell
+cd backend
+docker compose up -d db
+docker compose -f docker-compose.yml -f docker-compose.sqlserver-migration.yml run --rm --no-deps backend python manage.py transfer_postgres_to_sqlserver
 ```
 
 Antes de actualizar un ambiente con datos, obtener y verificar una copia de seguridad PostgreSQL. Las migraciones se ejecutan automáticamente por `docker/entrypoint.sh` salvo que `RUN_MIGRATIONS` se desactive.
