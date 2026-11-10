@@ -357,6 +357,8 @@ Antes de actualizar un ambiente con datos, obtener y verificar una copia de segu
 
 En Render, configurar `DATABASE_URL` con la URL interna de PostgreSQL asociada al servicio. PostgreSQL es el motor predeterminado y Django usa esa URL antes de las variables `POSTGRES_*`; así no intenta conectar a `localhost:5432`. Mantener el Web Service y PostgreSQL en la misma región para usar la URL interna. Render documenta este flujo en [conexión a PostgreSQL](https://render.com/docs/postgresql-creating-connecting).
 
+Para conectar el frontend Vercel con el backend Render, definir en Vercel `VITE_API_URL` con el origen del Web Service Render, sin `/api/v1` (por ejemplo, `https://mi-api.onrender.com`) y volver a desplegar. En Render, incluir el origen exacto de Vercel en `CORS_ALLOWED_ORIGINS` y `CSRF_TRUSTED_ORIGINS`, y definir `AUTH_COOKIE_SAMESITE=None` para que el navegador envíe las cookies cross-site por HTTPS. Django entrega el token CSRF en `/api/v1/auth/csrf/`; el cliente del frontend lo solicita antes de cada método que modifica datos. Si el navegador bloquea cookies de terceros, usar dominios propios del mismo sitio para frontend y API.
+
 El puerto del backend se publica solo en `127.0.0.1` del host para que un proxy TLS local pueda acceder a Gunicorn sin exponerlo directamente a Internet. Si el proxy corre en otro contenedor o servidor, usar una red privada y no publicar el puerto del backend en una interfaz pública; el proxy debe sobrescribir `X-Forwarded-Proto`.
 
 Comando de despliegue desde `backend/`:

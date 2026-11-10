@@ -4,6 +4,7 @@ from . import views
 
 # Prefijo /api/v1/ definido en config/urls.py. Las rutas auth/* usan cookies httpOnly (ver views.py).
 urlpatterns = [
+    path("auth/csrf/", views.CsrfTokenView.as_view(), name="csrf-token"),
     path("auth/login/", views.LoginView.as_view(), name="login"),
     path("auth/refresh/", views.RefreshView.as_view(), name="refresh"),
     path("auth/logout/", views.LogoutView.as_view(), name="logout"),

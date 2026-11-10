@@ -103,6 +103,15 @@ class LoginView(AuditLogMixin, APIView):
         return response
 
 
+class CsrfTokenView(APIView):
+    """Provides the CSRF token to credentialed frontends on a separate origin."""
+    authentication_classes: list = []
+    permission_classes = [AllowAny]
+
+    def get(self, request):
+        return Response({"csrfToken": get_token(request)})
+
+
 class RefreshView(AuditLogMixin, APIView):
     """POST /auth/refresh/: invalida el refresh token anterior y emite cookies JWT nuevas."""
     authentication_classes: list = []

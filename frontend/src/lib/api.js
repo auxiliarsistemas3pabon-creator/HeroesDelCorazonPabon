@@ -1,11 +1,24 @@
 // Cliente de la API. Las cookies httpOnly viajan solas (credentials) y las
 // peticiones que modifican datos llevan el token CSRF de la cookie `csrftoken`.
-const BASE = '/api/v1'
+const API_ORIGIN = (import.meta.env.VITE_API_URL || '').replace(/\/$/, '')
+const BASE = `${API_ORIGIN}/api/v1`
+let csrfTokenValue = ''
 
 // Django exige el token CSRF en cabecera para métodos no seguros; se lee de la cookie que emite el backend.
 function csrfToken() {
   const match = document.cookie.match(/(?:^|; )csrftoken=([^;]+)/)
-  return match ? decodeURIComponent(match[1]) : ''
+  return match ? decodeURIComponent(match[1]) : csrfTokenValue
+}
+
+async function ensureCsrfToken() {
+  if (csrfToken()) return csrfToken()
+  const response = await fetch(`${BASE}/auth/csrf/`, { credentials: 'include' })
+  const data = await response.json().catch(() => null)
+  if (!response.ok || !data?.csrfToken) {
+    throw Object.assign(new Error(`HTTP ${response.status}`), { status: response.status, data })
+  }
+  csrfTokenValue = data.csrfToken
+  return csrfTokenValue
 }
 
 // Convierte un error lanzado por `api` en texto para el usuario. Soporta el formato de DRF:
@@ -27,7 +40,7 @@ async function send(path, { method = 'GET', body } = {}) {
   const headers = {}
   const isForm = body instanceof FormData // archivos: el navegador pone el Content-Type con su boundary
   if (body !== undefined && !isForm) headers['Content-Type'] = 'application/json'
-  if (method !== 'GET') headers['X-CSRFToken'] = csrfToken()
+  if (method !== 'GET') headers['X-CSRFToken'] = await ensureCsrfToken()
 
   const response = await fetch(`${BASE}${path}`, {
     method,
