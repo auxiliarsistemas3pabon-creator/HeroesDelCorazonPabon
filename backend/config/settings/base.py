@@ -101,8 +101,8 @@ TEMPLATES = [
 
 WSGI_APPLICATION = 'config.wsgi.application'
 
-# SQL Server is the default. Environments still running PostgreSQL must opt in explicitly.
-DATABASE_ENGINE = os.getenv("DATABASE_ENGINE", default="mssql").lower()
+# PostgreSQL remains the default; SQL Server is selected explicitly per environment.
+DATABASE_ENGINE = os.getenv("DATABASE_ENGINE", default="postgresql").lower()
 if DATABASE_ENGINE in {"mssql", "sqlserver", "sql_server"}:
     DATABASES = {
         "default": {

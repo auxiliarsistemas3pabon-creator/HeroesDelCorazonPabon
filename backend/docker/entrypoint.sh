@@ -2,7 +2,7 @@
 set -e
 
 # Wait for the configured database to accept connections before starting Django.
-if [ "${DATABASE_ENGINE:-mssql}" = "mssql" ]; then
+if [ "${DATABASE_ENGINE:-postgresql}" = "mssql" ]; then
     if [ -z "${SQLSERVER_USER:-}" ] || [ -z "${SQLSERVER_PASSWORD:-}" ]; then
         echo "SQLSERVER_USER and SQLSERVER_PASSWORD are required for SQL Server." >&2
         exit 1
