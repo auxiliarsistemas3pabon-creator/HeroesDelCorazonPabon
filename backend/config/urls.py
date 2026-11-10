@@ -24,10 +24,24 @@ def health_check(request):
     """Simple liveness response for Render and container health probes."""
     return JsonResponse({"status": "ok"})
 
+
+def api_root(request):
+    """Small index so opening the API version root does not return a 404."""
+    return JsonResponse({
+        "version": "v1",
+        "endpoints": {
+            "csrf": "/api/v1/auth/csrf/",
+            "login": "/api/v1/auth/login/",
+            "admin": "/admin/",
+        },
+    })
+
+
 # Ambas apps comparten el prefijo api/v1/; sus rutas no deben chocar entre si.
 urlpatterns = [
     path('', health_check, name='health-check'),
     path('admin/', admin.site.urls),
+    path('api/v1/', api_root, name='api-root'),
     path('api/v1/', include('users.urls')),
     path('api/v1/', include('questions.urls')),
 ]
