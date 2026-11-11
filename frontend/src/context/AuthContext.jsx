@@ -1,5 +1,5 @@
 /* eslint-disable react-refresh/only-export-components */
-import { createContext, useContext, useEffect, useState } from 'react'
+import { createContext, useContext, useEffect, useRef, useState } from 'react'
 import { api } from '../lib/api'
 import { connectRealtime } from '../lib/realtime'
 
@@ -14,11 +14,13 @@ export function AuthProvider({ children }) {
   const [realtimeStatus, setRealtimeStatus] = useState('disconnected')
   const [realtimeEvent, setRealtimeEvent] = useState(null)
   const [realtimeNotice, setRealtimeNotice] = useState('')
+  const authOperation = useRef(0)
 
   useEffect(() => {
     let active = true
+    const operationAtStart = authOperation.current
     const updateUser = (nextUser) => {
-      if (active) setUser(nextUser)
+      if (active && operationAtStart === authOperation.current) setUser(nextUser)
     }
 
     async function restoreSession() {
@@ -38,7 +40,7 @@ export function AuthProvider({ children }) {
           updateUser(null)
         }
       } finally {
-        if (active) setLoading(false)
+        if (active && operationAtStart === authOperation.current) setLoading(false)
       }
     }
 
@@ -87,9 +89,29 @@ export function AuthProvider({ children }) {
   }, [loading, user])
 
   async function login(credentials) {
-    const data = await api('/auth/login/', { method: 'POST', body: credentials })
-    setUser(data)
-    return data
+    const operation = ++authOperation.current
+    setLoading(true)
+    setUser(null)
+    try {
+      await api('/auth/login/', { method: 'POST', body: credentials })
+      let authenticatedUser
+      try {
+        authenticatedUser = await api('/auth/me/')
+      } catch (error) {
+        if (error.status !== 401) throw error
+        // A fresh access cookie can take a moment to become available through the proxy;
+        // use the refresh cookie once, then verify the actual session before entering.
+        await api('/auth/refresh/', { method: 'POST' })
+        authenticatedUser = await api('/auth/me/')
+      }
+      if (operation === authOperation.current) setUser(authenticatedUser)
+      return authenticatedUser
+    } catch (error) {
+      if (operation === authOperation.current) setUser(null)
+      throw error
+    } finally {
+      if (operation === authOperation.current) setLoading(false)
+    }
   }
 
   // Vuelve a pedir el usuario al backend, p. ej. tras cambiar la contraseña para limpiar password_change_required.
@@ -100,6 +122,7 @@ export function AuthProvider({ children }) {
   }
 
   async function logout() {
+    authOperation.current += 1
     await api('/auth/logout/', { method: 'POST' })
     setUser(null)
   }

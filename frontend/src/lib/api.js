@@ -1,12 +1,11 @@
 // Cliente de la API. Las cookies httpOnly viajan solas (credentials) y las
 // peticiones que modifican datos llevan el token CSRF de la cookie `csrftoken`.
-// VITE_API_URL apunta directamente al servicio Render en desarrollo y producción.
+// En producción la API usa el mismo origen del frontend (Vercel la reenvía a Render).
+// Así las cookies httpOnly de sesión son first-party y no dependen de cookies de terceros.
 const DEFAULT_PRODUCTION_API_ORIGIN = 'https://heroesdelcorazon-pabon.onrender.com'
-const configuredApiOrigin = (
-  import.meta.env.VITE_API_URL
-  || (import.meta.env.PROD ? DEFAULT_PRODUCTION_API_ORIGIN : '')
-).replace(/\/api\/v1\/?$/, '').replace(/\/$/, '')
-const API_ORIGIN = configuredApiOrigin
+const configuredApiOrigin = (import.meta.env.VITE_API_URL || DEFAULT_PRODUCTION_API_ORIGIN)
+  .replace(/\/api\/v1\/?$/, '').replace(/\/$/, '')
+const API_ORIGIN = import.meta.env.PROD ? '' : (import.meta.env.VITE_API_URL ? configuredApiOrigin : '')
 const BASE = `${API_ORIGIN}/api/v1`
 let csrfTokenValue = ''
 
@@ -44,12 +43,6 @@ export function errorMessage(error, fallback = 'Ocurrió un error') {
 // Petición sin reintentos. Lanza Error con `status` y `data` (cuerpo JSON del error) para errorMessage.
 // `body` puede ser objeto (se serializa a JSON) o FormData (subida de archivos).
 async function send(path, { method = 'GET', body } = {}) {
-  if (import.meta.env.PROD && !API_ORIGIN) {
-    throw Object.assign(new Error('VITE_API_URL no está configurada.'), {
-      data: { detail: 'Falta configurar VITE_API_URL en Vercel con la URL del backend de Render.' },
-    })
-  }
-
   const headers = {}
   const isForm = body instanceof FormData // archivos: el navegador pone el Content-Type con su boundary
   if (body !== undefined && !isForm) headers['Content-Type'] = 'application/json'
