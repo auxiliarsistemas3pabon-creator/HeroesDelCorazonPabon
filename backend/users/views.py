@@ -151,9 +151,14 @@ class LogoutView(AuditLogMixin, APIView):
 
 
 class MeView(AuditLogMixin, APIView):
-    """GET /auth/me/: devuelve el usuario autenticado y establece la cookie CSRF para futuras mutaciones."""
+    """GET /auth/me/: devuelve el usuario de sesión, o null si no hay sesión."""
+
+    permission_classes = [AllowAny]
+
     def get(self, request):
         get_token(request)
+        if not request.user.is_authenticated:
+            return Response(None)
         return Response(AuthenticatedUserSerializer(request.user).data)
 
 

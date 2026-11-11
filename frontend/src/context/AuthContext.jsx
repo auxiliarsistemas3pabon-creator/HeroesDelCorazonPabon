@@ -16,10 +16,34 @@ export function AuthProvider({ children }) {
   const [realtimeNotice, setRealtimeNotice] = useState('')
 
   useEffect(() => {
-    api('/auth/me/')
-      .then(setUser)
-      .catch(() => setUser(null))
-      .finally(() => setLoading(false))
+    let active = true
+    const updateUser = (nextUser) => {
+      if (active) setUser(nextUser)
+    }
+
+    async function restoreSession() {
+      try {
+        updateUser(await api('/auth/me/'))
+      } catch (error) {
+        // An expired access cookie can still have a valid refresh cookie.
+        // Restore it once before treating the browser as signed out.
+        if (error.status === 401) {
+          try {
+            await api('/auth/refresh/', { method: 'POST' })
+            updateUser(await api('/auth/me/'))
+          } catch {
+            updateUser(null)
+          }
+        } else {
+          updateUser(null)
+        }
+      } finally {
+        if (active) setLoading(false)
+      }
+    }
+
+    restoreSession()
+    return () => { active = false }
   }, [])
 
   useEffect(() => {

@@ -61,7 +61,9 @@ class AuthTests(APITestCase):
         self.assertEqual(self.client.get("/api/v1/users/collaborators/").status_code, 200)
 
     def test_me_without_session(self):
-        self.assertEqual(self.client.get("/api/v1/auth/me/").status_code, 401)
+        response = self.client.get("/api/v1/auth/me/")
+        self.assertEqual(response.status_code, 200)
+        self.assertIsNone(response.data)
 
     def test_cookie_requires_csrf_on_post(self):
         self.client.post("/api/v1/auth/login/", {"username": "boss.demo", "password": PASSWORD})
@@ -73,7 +75,9 @@ class AuthTests(APITestCase):
         self.client.post("/api/v1/auth/login/", {"username": "boss.demo", "password": PASSWORD})
         self.assertEqual(self.client.post("/api/v1/auth/refresh/").status_code, 200)
         self.assertEqual(self.client.post("/api/v1/auth/logout/").status_code, 204)
-        self.assertEqual(self.client.get("/api/v1/auth/me/").status_code, 401)
+        response = self.client.get("/api/v1/auth/me/")
+        self.assertEqual(response.status_code, 200)
+        self.assertIsNone(response.data)
 
     def test_messages_are_translated_to_spanish(self):
         r = self.client.post("/api/v1/auth/login/", {"username": "boss.demo", "password": "wrong"})
