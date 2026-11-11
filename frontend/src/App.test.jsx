@@ -1,5 +1,4 @@
 
-import React from 'react'
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { render, screen, cleanup } from '@testing-library/react'
 import App from './App'
@@ -109,10 +108,10 @@ describe('App.jsx - Rutas, autenticación y permisos', () => {
     expect(screen.getByText('LoginPage')).toBeInTheDocument()
   })
 
-  it('debe mostrar cambio de contraseña', () => {
+  it('debe mostrar cambio de contraseña', async () => {
     renderApp('/change-password')
 
-    expect(screen.getByText('PasswordChangePage')).toBeInTheDocument()
+    expect(await screen.findByText('PasswordChangePage')).toBeInTheDocument()
   })
 
   // ===================================================
@@ -142,7 +141,7 @@ describe('App.jsx - Rutas, autenticación y permisos', () => {
     expect(screen.getByText('LoginPage')).toBeInTheDocument()
   })
 
-  it('debe redirigir a cambio de contraseña si es obligatorio', () => {
+  it('debe redirigir a cambio de contraseña si es obligatorio', async () => {
     mockUseAuth.mockReturnValue({
       user: {
         ...usuario,
@@ -153,7 +152,7 @@ describe('App.jsx - Rutas, autenticación y permisos', () => {
 
     renderApp('/results')
 
-    expect(screen.getByText('PasswordChangePage')).toBeInTheDocument()
+    expect(await screen.findByText('PasswordChangePage')).toBeInTheDocument()
   })
 
   // ===================================================
@@ -162,7 +161,7 @@ describe('App.jsx - Rutas, autenticación y permisos', () => {
 
   it.each(['boss', 'superadmin'])(
     'debe mostrar Dashboard para el rol %s',
-    (role) => {
+    async (role) => {
       mockUseAuth.mockReturnValue({
         user: { ...usuario, role },
         loading: false,
@@ -173,21 +172,21 @@ describe('App.jsx - Rutas, autenticación y permisos', () => {
 
       renderApp('/dashboard')
 
-      expect(screen.getByText('DashboardPage')).toBeInTheDocument()
+      expect(await screen.findByText('DashboardPage')).toBeInTheDocument()
     }
   )
 
-  it('debe redirigir collaborator a evaluaciones', () => {
+  it('debe redirigir collaborator a evaluaciones', async () => {
     renderApp('/dashboard')
 
-    expect(screen.getByText('EvaluationPage')).toBeInTheDocument()
+    expect(await screen.findByText('EvaluationPage')).toBeInTheDocument()
   })
 
   // ===================================================
   // 4. PROTECCIÓN DE STAFF
   // ===================================================
 
-  it('debe permitir Staff a superadmin', () => {
+  it('debe permitir Staff a superadmin', async () => {
     mockUseAuth.mockReturnValue({
       user: { ...usuario, role: 'superadmin' },
       loading: false,
@@ -198,12 +197,12 @@ describe('App.jsx - Rutas, autenticación y permisos', () => {
 
     renderApp('/staff')
 
-    expect(screen.getByText('StaffImportPage')).toBeInTheDocument()
+    expect(await screen.findByText('StaffImportPage')).toBeInTheDocument()
   })
 
   it.each(['boss', 'collaborator'])(
     'debe impedir acceso a Staff para %s',
-    (role) => {
+    async (role) => {
       mockUseAuth.mockReturnValue({
         user: { ...usuario, role },
         loading: false,
@@ -217,9 +216,9 @@ describe('App.jsx - Rutas, autenticación y permisos', () => {
       expect(screen.queryByText('StaffImportPage')).not.toBeInTheDocument()
 
       if (role === 'boss') {
-        expect(screen.getByText('DashboardPage')).toBeInTheDocument()
+        expect(await screen.findByText('DashboardPage')).toBeInTheDocument()
       } else {
-        expect(screen.getByText('EvaluationPage')).toBeInTheDocument()
+        expect(await screen.findByText('EvaluationPage')).toBeInTheDocument()
       }
     }
   )
@@ -234,23 +233,23 @@ describe('App.jsx - Rutas, autenticación y permisos', () => {
     ['/evaluations-list', 'EvaluationsListPage'],
     ['/create', 'FormCreatePage'],
     ['/program', 'FormProgramPage'],
-  ])('debe mostrar la página correspondiente a %s', (path, page) => {
+  ])('debe mostrar la página correspondiente a %s', async (path, page) => {
     renderApp(path)
 
-    expect(screen.getByText(page)).toBeInTheDocument()
+    expect(await screen.findByText(page)).toBeInTheDocument()
   })
 
   // ===================================================
   // 6. RUTA DESCONOCIDA
   // ===================================================
 
-  it('debe redirigir una ruta desconocida según el rol', () => {
+  it('debe redirigir una ruta desconocida según el rol', async () => {
     renderApp('/ruta-inexistente')
 
-    expect(screen.getByText('EvaluationPage')).toBeInTheDocument()
+    expect(await screen.findByText('EvaluationPage')).toBeInTheDocument()
   })
 
-  it('debe redirigir una ruta desconocida al Dashboard para boss', () => {
+  it('debe redirigir una ruta desconocida al Dashboard para boss', async () => {
     mockUseAuth.mockReturnValue({
       user: { ...usuario, role: 'boss' },
       loading: false,
@@ -261,7 +260,7 @@ describe('App.jsx - Rutas, autenticación y permisos', () => {
 
     renderApp('/ruta-inexistente')
 
-    expect(screen.getByText('DashboardPage')).toBeInTheDocument()
+    expect(await screen.findByText('DashboardPage')).toBeInTheDocument()
   })
 
 })

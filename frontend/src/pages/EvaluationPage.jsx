@@ -45,8 +45,8 @@ function EvaluationForm({ evaluation, onBack }) {
   const fixedPeople = evaluation.random_selection && quota?.assigned
     ? available.filter((p) => quota.assigned.includes(p.id)).slice(0, max)
     : null
-  // Selección manual: 5 personas por página; lo marcado se conserva al cambiar de página.
-  const PEOPLE_PER_PAGE = 5
+  // Selección manual: 23 personas por página; lo marcado se conserva al cambiar de página.
+  const PEOPLE_PER_PAGE = 23
   const peopleTotalPages = Math.max(1, Math.ceil(available.length / PEOPLE_PER_PAGE))
   const currentPeoplePage = Math.min(peoplePage, peopleTotalPages)
   const visiblePeople = fixedPeople ?? available.slice((currentPeoplePage - 1) * PEOPLE_PER_PAGE, currentPeoplePage * PEOPLE_PER_PAGE)

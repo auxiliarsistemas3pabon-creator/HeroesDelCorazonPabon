@@ -244,11 +244,13 @@ class StaffImportTests(APITestCase):
             role=User.Role.PERSONAL,
             area="Sistemas",
         )
+        sistemas_collaborator = create_user("collaborator-sistemas", area="Sistemas")
         self.client.force_authenticate(self.boss)
         candidates = self.client.get("/api/v1/users/staff-candidates/").data
         candidate_ids = [candidate["id"] for candidate in candidates]
         self.assertNotIn(legacy_staff.pk, candidate_ids)
         self.assertIn(sistemas_staff.pk, candidate_ids)
+        self.assertIn(sistemas_collaborator.pk, candidate_ids)
 
         response = self.upload([
             ("2001", "Ana", "Pérez", "Sistema", "Auxiliar"),

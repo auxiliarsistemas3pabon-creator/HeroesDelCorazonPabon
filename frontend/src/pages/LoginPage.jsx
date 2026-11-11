@@ -73,7 +73,7 @@ export function LoginPage() {
         />
       </aside>
 
-      <section className="flex min-h-dvh min-w-0 items-center justify-center bg-[#fffaf8] px-8 py-6">
+      <main className="flex min-h-dvh min-w-0 items-center justify-center bg-[#fffaf8] px-8 py-6">
         <div className="w-full max-w-sm">
           <div className="mb-4">
             <h1 className="text-xl font-bold text-[#25151a]">Iniciar sesión</h1>
@@ -95,7 +95,7 @@ export function LoginPage() {
             </Button>
           </form>
         </div>
-      </section>
+      </main>
     </div>
   )
 }

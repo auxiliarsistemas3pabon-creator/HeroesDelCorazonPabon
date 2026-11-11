@@ -1,6 +1,5 @@
-const BACKEND_ORIGIN = import.meta.env.VITE_API_URL
-  || (import.meta.env.DEV ? window.location.origin : 'https://heroesdelcorazon-pabon.onrender.com')
-
 export function mediaUrl(filename) {
-  return `${BACKEND_ORIGIN.replace(/\/$/, '')}/static/branding/${filename}`
+  // Las imágenes de marca viajan con el frontend: no esperan al backend ni a su
+  // servicio de archivos y los PNG grandes se sirven optimizados como WebP.
+  return `/branding/${filename.replace(/\.png$/i, '.webp')}`
 }

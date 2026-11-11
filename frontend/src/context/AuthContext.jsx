@@ -87,13 +87,9 @@ export function AuthProvider({ children }) {
     setLoading(true)
     setUser(null)
     try {
-      await api('/auth/login/', { method: 'POST', body: credentials })
-      let authenticatedUser
-      try {
-        authenticatedUser = await api('/auth/me/')
-      } catch (error) {
-        if (error.status !== 401) throw error
-      }
+      // Login ya devuelve el perfil autenticado y fija las cookies httpOnly:
+      // reutilizarlo evita una ida y vuelta extra antes de abrir la aplicación.
+      let authenticatedUser = await api('/auth/login/', { method: 'POST', body: credentials })
       if (!authenticatedUser) {
         // /auth/me/ uses 200 + null for an absent/invalid access cookie.
         // Try the refresh cookie once before reporting a session transport issue.

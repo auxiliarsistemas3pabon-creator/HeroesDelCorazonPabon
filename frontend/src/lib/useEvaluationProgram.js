@@ -114,10 +114,9 @@ export function useEvaluationProgram({ evaluation, staff, onSaved, createNew = f
     })
   }
 
-  // Manual y aleatoria son excluyentes. Aleatoria fija la cantidad en RANDOM_COUNT; manual la deja editable.
+  // Manual y aleatoria son excluyentes; la cantidad se puede ajustar en ambos modos.
   function setRandomSelection(enabled) {
     setRandomSelectionState(enabled)
-    if (enabled) setValue(String(RANDOM_COUNT))
   }
 
   // Crear: POST a /programs/ (copia nueva de la evaluación). Editar: PATCH de fecha/áreas/modo y PUT aparte

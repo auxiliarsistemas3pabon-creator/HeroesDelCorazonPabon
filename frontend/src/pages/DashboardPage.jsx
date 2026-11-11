@@ -1,5 +1,4 @@
 ﻿import { Building2, CheckCircle2, Users } from 'lucide-react'
-import * as XLSX from 'xlsx';
 import { useEffect, useState } from 'react'
 import { Bar, BarChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts'
 import { useAuth } from '../context/AuthContext'
@@ -13,8 +12,6 @@ import { ratingScale } from '../lib/ratingScales'
 
 
 
-// Color de marca (rojo corporativo). Fallback del color de barra cuando no hay evaluación elegida.
-const RED = '#d71920'
 // Paleta cíclica: cada evaluación conserva siempre el mismo color según su posición en la lista.
 const EVALUATION_COLORS = ['#eab308', '#2563eb', '#16a34a', '#f97316', '#7c3aed', '#0891b2', '#db2777', '#4d7c0f']
 
@@ -30,25 +27,6 @@ function Kpi({ icon: Icon, label, value }) {
     </Card>
   )
 }
-
-// WIP: exporta un arreglo de objetos a .xlsx (hoja "Data"). Ojo: `saveAs` no está importado
-// (falta `file-saver`) y ninguna UI la llama todavía; no funcionará hasta completarlo.
-function descargarExcel(data,filename) {
-  const hoja = XLSX.utils.json_to_sheet(data);
-  const book = XLSX.utils.book_new();
-  XLSX.utils.book_append_sheet(book,hoja,"Data");
-
-  const excelBuffer = XLSX.write(book,{
-    bookType:"xlsx",
-    type:"array"
-  })
-
-  const blob = new Blob([excelBuffer],{
-    type:"application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-  });
-
-  saveAs(blob,"reporte.xlsx");
-} 
 
 // Contenedor de gráfica con título/subtítulo; ResponsiveContainer exige que el padre tenga alto fijo (h-72).
 function ChartCard({ title, subtitle, children }) {
@@ -68,6 +46,8 @@ function ChartCard({ title, subtitle, children }) {
  * Los datos vienen de /questions/category-averages/ con `mine=1` (solo evaluaciones del propio jefe).
  */
 function BossCategories({ people, evaluations }) {
+  const { realtimeEvent } = useAuth()
+  const submissionsUpdatedAt = realtimeEvent?.type === 'questions.submitted' ? realtimeEvent.sent_at : null
   const [personal, setPersonal] = useState('')
   const [area, setArea] = useState('')
   const [position, setPosition] = useState('')
@@ -97,7 +77,7 @@ function BossCategories({ people, evaluations }) {
         setResult(data)
       })
       .catch((e) => setError(errorMessage(e)))
-  }, [personal, area, position, evaluation, dates])
+  }, [personal, area, position, evaluation, dates, submissionsUpdatedAt])
 
   // Solo se puede evaluar a colaboradores; los jefes no aparecen como persona evaluada. Área > Cargo > Persona en cascada.
   const collaborators = people.filter((p) => p.role === 'collaborator')
@@ -193,20 +173,25 @@ function BossCategories({ people, evaluations }) {
 
 // Carga en paralelo los KPIs (/dashboard/) y las evaluaciones del jefe; un fallo de cualquiera muestra un único error.
 function BossDashboard() {
+  const { realtimeEvent } = useAuth()
+  const submissionsUpdatedAt = realtimeEvent?.type === 'questions.submitted' ? realtimeEvent.sent_at : null
   const [people, setPeople] = useState([])
   const [evaluations, setEvaluations] = useState(null)
   const [kpis, setKpis] = useState(null)
   const [error, setError] = useState(null)
 
   useEffect(() => {
+    let current = true
     Promise.all([api('/questions/dashboard/'), api('/questions/evaluations/?mine=1')])
       .then(([dashboard, list]) => {
+        if (!current) return
         setPeople(dashboard.people || [])
         setKpis(dashboard)
         setEvaluations(list)
       })
-      .catch((e) => setError(errorMessage(e)))
-  }, [])
+      .catch((e) => { if (current) setError(errorMessage(e)) })
+    return () => { current = false }
+  }, [submissionsUpdatedAt])
 
   if (error) return <div role="alert" className={ALERT_ERROR}>{error}</div>
 
