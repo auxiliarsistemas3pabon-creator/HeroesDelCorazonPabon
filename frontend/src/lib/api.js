@@ -37,6 +37,8 @@ export function errorMessage(error, fallback = 'Ocurrió un error') {
   const data = error?.data
   if (error?.status === 404) return 'El servidor no encontró esta ruta de la API. Verifica el despliegue y la ruta solicitada.'
   if (error?.status === 401) return 'Render rechazó el usuario o la contraseña. Verifica las credenciales de esta cuenta.'
+  if (error?.status === 403) return 'Render bloqueó temporalmente el acceso o rechazó la solicitud. Si hubo varios intentos, espera a que expire el bloqueo de seguridad.'
+  if (error?.status === 429) return 'Se alcanzó el límite de intentos. Espera antes de volver a iniciar sesión.'
   if (!data) return fallback
   if (typeof data.detail === 'string') return data.detail
   const first = Object.values(data).flat()[0]
