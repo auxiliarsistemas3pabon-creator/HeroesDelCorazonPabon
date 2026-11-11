@@ -302,7 +302,7 @@ FRONTEND_BASE_URL = os.getenv(
 # Vercel preview deployment currently used for this project. Keep this exact
 # host scoped; preview deployment URLs can change and must then be updated.
 VERCEL_PREVIEW_ORIGIN = "https://heroes-del-corazon-pabon-58i8y4oqa.vercel.app"
-RENDER_DOCKER_FRONTEND_ORIGIN = "https://heroes-del-corazon-web-docker.onrender.com"
+RENDER_DOCKER_FRONTEND_ORIGIN = "https://heroesdelcorazon-pabon-1.onrender.com"
 
 # CORS / CSRF CONFIG. Always allow the configured frontend's exact origin.
 CORS_ALLOWED_ORIGINS = list(dict.fromkeys([
