@@ -61,7 +61,9 @@ class AuthTests(APITestCase):
         self.assertEqual(self.client.get("/api/v1/users/collaborators/").status_code, 200)
 
     def test_me_without_session(self):
-        self.assertEqual(self.client.get("/api/v1/auth/me/").status_code, 401)
+        response = self.client.get("/api/v1/auth/me/")
+        self.assertEqual(response.status_code, 200)
+        self.assertIsNone(response.data)
 
     def test_cookie_requires_csrf_on_post(self):
         self.client.post("/api/v1/auth/login/", {"username": "boss.demo", "password": PASSWORD})
@@ -73,7 +75,9 @@ class AuthTests(APITestCase):
         self.client.post("/api/v1/auth/login/", {"username": "boss.demo", "password": PASSWORD})
         self.assertEqual(self.client.post("/api/v1/auth/refresh/").status_code, 200)
         self.assertEqual(self.client.post("/api/v1/auth/logout/").status_code, 204)
-        self.assertEqual(self.client.get("/api/v1/auth/me/").status_code, 401)
+        response = self.client.get("/api/v1/auth/me/")
+        self.assertEqual(response.status_code, 200)
+        self.assertIsNone(response.data)
 
     def test_messages_are_translated_to_spanish(self):
         r = self.client.post("/api/v1/auth/login/", {"username": "boss.demo", "password": "wrong"})
@@ -113,23 +117,33 @@ class PasswordRecoveryTests(APITestCase):
 
 
 class RegisterTests(APITestCase):
-    def test_public_sign_up_creates_a_collaborator_and_can_log_in(self):
-        create_user("boss.demo", User.Role.BOSS, area="Cardiology")
+    def test_only_superadmins_can_create_collaborators(self):
+        create_user("evaluator.demo", User.Role.COLLABORATOR, area="Cardiology")
         self.assertEqual(self.client.get("/api/v1/users/areas/").data, ["Cardiology"])
 
         body = {
             "username": "nuevo.demo", "email": "nuevo@demo.com", "first_name": "Nuevo", "last_name": "Demo",
             "area": "Cardiology", "position": "Enfermera", "password": "Clave-Nueva-2026", "role": "boss",
         }
-        r = self.client.post("/api/v1/users/register/", body)
+        url = "/api/v1/users/register/"
+        self.assertEqual(self.client.post(url, body).status_code, 401)
+
+        self.client.force_authenticate(create_user("outside.demo", User.Role.COLLABORATOR))
+        self.assertEqual(self.client.post(url, body).status_code, 403)
+
+        admin = create_user("admin.demo", User.Role.SUPERADMIN)
+        self.client.force_authenticate(admin)
+        r = self.client.post(url, body)
         self.assertEqual(r.status_code, 201)
         self.assertNotIn("password", r.data)
         self.assertEqual(User.objects.get(username="nuevo.demo").role, "collaborator")  # role cannot be chosen
+        self.client.force_authenticate(None)
         r = self.client.post("/api/v1/auth/login/", {"username": "nuevo.demo", "password": "Clave-Nueva-2026"})
         self.assertEqual(r.status_code, 200)
 
     def test_sign_up_needs_no_email_and_validates_area(self):
         base = {"username": "x.demo", "first_name": "X", "last_name": "Y", "password": "Clave-Nueva-2026", "area": "Nursing", "position": "Enfermera"}
+        self.client.force_authenticate(create_user("admin.demo", User.Role.SUPERADMIN))
         self.assertEqual(self.client.post("/api/v1/users/register/", {**base, "area": ""}).status_code, 400)
         self.assertEqual(self.client.post("/api/v1/users/register/", {**base, "position": ""}).status_code, 400)
         self.assertEqual(self.client.post("/api/v1/users/register/", {**base, "area": "Sistema"}).status_code, 400)
@@ -155,7 +169,7 @@ class StaffImportTests(APITestCase):
     URL = "/api/v1/users/import/"
 
     def setUp(self):
-        self.boss = create_user("boss.demo", User.Role.BOSS)
+        self.boss = create_user("admin.demo", User.Role.SUPERADMIN)
 
     def excel(self, rows, header=("Número de documento", "Nombres", "Apellidos", "Área", "Cargo")):
         import io
@@ -219,7 +233,7 @@ class StaffImportTests(APITestCase):
             password=PASSWORD,
             first_name="Sistema",
             last_name="Legado",
-            role=User.Role.COLLABORATOR,
+            role=User.Role.PERSONAL,
             area="Sistema",
         )
         sistemas_staff = User.objects.create_user(
@@ -227,7 +241,7 @@ class StaffImportTests(APITestCase):
             password=PASSWORD,
             first_name="Sistemas",
             last_name="Actual",
-            role=User.Role.COLLABORATOR,
+            role=User.Role.PERSONAL,
             area="Sistemas",
         )
         self.client.force_authenticate(self.boss)

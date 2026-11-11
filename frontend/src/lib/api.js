@@ -1,20 +1,46 @@
 // Cliente de la API. Las cookies httpOnly viajan solas (credentials) y las
 // peticiones que modifican datos llevan el token CSRF de la cookie `csrftoken`.
+// En producción la API usa el mismo origen del frontend (Render la reenvía al backend).
+// Así las cookies httpOnly de sesión son first-party y no dependen de cookies de terceros.
+// Always call the API through the frontend origin. In local development Vite
+// proxies /api to the Docker backend configured by VITE_API_URL; Render applies
+// the equivalent /api rewrite in production. This keeps auth cookies first-party.
 const BASE = '/api/v1'
+let csrfTokenValue = ''
 
 // Django exige el token CSRF en cabecera para métodos no seguros; se lee de la cookie que emite el backend.
 function csrfToken() {
   const match = document.cookie.match(/(?:^|; )csrftoken=([^;]+)/)
-  return match ? decodeURIComponent(match[1]) : ''
+  return match ? decodeURIComponent(match[1]) : csrfTokenValue
+}
+
+async function ensureCsrfToken() {
+  if (csrfToken()) return csrfToken()
+  const response = await fetch(`${BASE}/auth/csrf/`, { credentials: 'include' })
+  const data = await response.json().catch(() => null)
+  if (!response.ok || !data?.csrfToken) {
+    throw Object.assign(new Error(`HTTP ${response.status}`), { status: response.status, data })
+  }
+  csrfTokenValue = data.csrfToken
+  return csrfTokenValue
 }
 
 // Convierte un error lanzado por `api` en texto para el usuario. Soporta el formato de DRF:
 // { detail: '...' } o { campo: ['mensaje'] } (se toma el primer mensaje).
 export function errorMessage(error, fallback = 'Ocurrió un error') {
+  if (error?.code === 'SESSION_NOT_ESTABLISHED') {
+    return import.meta.env.DEV
+      ? 'El backend aceptó el inicio de sesión, pero no se conservó la cookie. Comprueba que Docker y el proxy local estén activos.'
+      : 'El backend aceptó el inicio de sesión, pero no se conservó la cookie. Comprueba el proxy /api del frontend de Render.'
+  }
   // 502/503/504: el backend se está reiniciando o no responde; fetch sin status: no hay conexión.
   if (error?.status >= 502) return 'El servidor no está disponible en este momento. Intenta de nuevo en unos segundos.'
   if (error instanceof TypeError) return 'No hay conexión con el servidor. Revisa tu red e intenta de nuevo.'
   const data = error?.data
+  if (error?.status === 404) return 'El servidor no encontró esta ruta de la API. Verifica el despliegue y la ruta solicitada.'
+  if (error?.status === 401) return 'Render rechazó el usuario o la contraseña. Verifica las credenciales de esta cuenta.'
+  if (error?.status === 403) return 'Render bloqueó temporalmente el acceso o rechazó la solicitud. Si hubo varios intentos, espera a que expire el bloqueo de seguridad.'
+  if (error?.status === 429) return 'Se alcanzó el límite de intentos. Espera antes de volver a iniciar sesión.'
   if (!data) return fallback
   if (typeof data.detail === 'string') return data.detail
   const first = Object.values(data).flat()[0]
@@ -27,7 +53,7 @@ async function send(path, { method = 'GET', body } = {}) {
   const headers = {}
   const isForm = body instanceof FormData // archivos: el navegador pone el Content-Type con su boundary
   if (body !== undefined && !isForm) headers['Content-Type'] = 'application/json'
-  if (method !== 'GET') headers['X-CSRFToken'] = csrfToken()
+  if (method !== 'GET') headers['X-CSRFToken'] = await ensureCsrfToken()
 
   const response = await fetch(`${BASE}${path}`, {
     method,

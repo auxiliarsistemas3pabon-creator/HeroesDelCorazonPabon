@@ -5,17 +5,39 @@ import { defineConfig, loadEnv } from 'vite'
 
 // https://vite.dev/config/
 export default defineConfig(({ mode }) => {
-  // VITE_API_URL (en .env) = origen del backend, sin /api/v1 (ej. http://localhost:8000).
+  // VITE_API_URL (en .env) = origen del backend, sin /api/v1 (ej. http://localhost:8001).
   const env = loadEnv(mode, process.cwd(), '')
+  const jsxTransform = mode === 'test'
+    ? { esbuild: { jsx: 'automatic' } }
+    : { oxc: { jsx: { runtime: 'automatic' } } }
 
   return {
     plugins: [react(), tailwindcss()],
+    // Vitest usa esbuild para JSX y el build de Vite 8 usa Oxc.
+    ...jsxTransform,
     server: {
-      // El front llama a /api/v1/... en su mismo origen (cookies httpOnly + CSRF sin CORS)
-      // y Vite reenvía esas peticiones al backend.
+      // API y WebSocket usan el mismo origen del navegador; Vite reenvía ambos al backend.
       proxy: {
-        '/api': env.VITE_API_URL || 'http://localhost:8000',
+        '/api': env.VITE_API_URL || 'http://localhost:8001',
+        '/ws': {
+          target: env.VITE_API_URL || 'http://localhost:8001',
+          ws: true,
+        },
       },
     },
+    test: {
+      environment: 'jsdom',
+      globals: true,
+      setupFiles: './src/test/setup.js',
+      include: ['src/**/*.{test,spec}.{js,jsx}'],
+      clearMocks: true,
+      restoreMocks: true,
+      coverage: {
+        provider: 'v8',
+        reporter: ['text', 'html'],
+        include: ['src/**/*.{js,jsx}'],
+        exclude: ['src/**/*.test.{js,jsx}', 'src/**/test/**'],
+      }
+    }
   }
 })

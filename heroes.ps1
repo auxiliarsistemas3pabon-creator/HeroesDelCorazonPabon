@@ -11,7 +11,7 @@
 #
 #   shell                    shell de Django                 (docker compose exec backend python manage.py shell)
 #   bash                     terminal dentro del contenedor, en /app (salir: exit)
-#   dbshell                  consola de PostgreSQL
+#   dbshell                  consola del motor configurado
 #   migrate                  aplica las migraciones pendientes
 #   makemigrations <app>     crea migraciones                (ej: makemigrations questions)
 #   test [app]               corre los tests                 (ej: test questions; sin app: questions y users)
@@ -45,7 +45,7 @@ function Show-Help {
 Uso: .\heroes.ps1 <comando> [argumentos]
 
 Contenedores
-  up              levanta todo (API, base de datos y correo) en segundo plano
+  up              levanta API, PostgreSQL y correo en segundo plano
   build           levanta reconstruyendo la imagen (después de cambiar requirements)
   down            apaga todo (los datos de la base se conservan)
   restart         reinicia la API
@@ -55,7 +55,7 @@ Contenedores
 Django
   shell           shell de Django (python manage.py shell)
   bash            terminal dentro del contenedor de la API
-  dbshell         consola de PostgreSQL
+  dbshell         consola de la base configurada
   migrate         aplica las migraciones pendientes
   makemigrations  crea migraciones   (ej: .\heroes.ps1 makemigrations questions)
   superuser       crea un superusuario

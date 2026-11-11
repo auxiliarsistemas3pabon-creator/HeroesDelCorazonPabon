@@ -1,3 +1,5 @@
+
+import React from 'react'
 import { BrowserRouter, Navigate, Route, Routes } from 'react-router-dom'
 import { Layout } from './components/Layout'
 import { AuthProvider, useAuth } from './context/AuthContext'
@@ -20,7 +22,7 @@ function Home() {
 
 function StaffRoute() {
   const { user } = useAuth()
-  return user.role === 'superadmin' ? <StaffImportPage /> : <Navigate to="/" replace />
+  return user.role === 'superadmin' ? <StaffImportPage /> : <Navigate to="/dashboard" replace />
 }
 
 // Rutas: /login y /change-password van fuera de <Layout>; el resto se renderiza dentro de Layout, que exige sesión
@@ -32,9 +34,10 @@ function App() {
         {/* AuthProvider dentro del Router para poder usar navegación; consulta /auth/me/ al iniciar */}
         <Routes>
           <Route path="/login" element={<LoginPage />} />
+          <Route path="/" element={<LoginPage />} />
           <Route path="/change-password" element={<PasswordChangePage />} />
           <Route element={<Layout />}>
-            <Route path="/" element={<Home />} />
+            <Route path="/dashboard" element={<Home />} />
             <Route path="/evaluations" element={<EvaluationPage />} />
             <Route path="/results" element={<ResultsPage />} />
             <Route path="/evaluations-list" element={<EvaluationsListPage />} />
@@ -42,8 +45,8 @@ function App() {
             <Route path="/program" element={<FormProgramPage/>} />
             {/* Solo el superadmin carga datos; el backend lo exige igualmente */}
             <Route path="/staff" element={<StaffRoute />} />
-            {/* Cualquier ruta desconocida vuelve a Home, que decide según el rol */}
-            <Route path="*" element={<Navigate to="/" replace />} />
+            {/* Cualquier ruta desconocida vuelve al destino autenticado por rol */}
+            <Route path="*" element={<Navigate to="/dashboard" replace />} />
           </Route>
         </Routes>
       </AuthProvider>

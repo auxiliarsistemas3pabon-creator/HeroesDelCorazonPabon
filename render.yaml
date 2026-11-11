@@ -1,0 +1,20 @@
+services:
+  - type: web
+    name: HeroesDelCorazon-pabon-1
+    runtime: static
+    rootDir: frontend
+    buildCommand: npm ci && npm run build
+    staticPublishPath: dist
+    routes:
+      # Same-origin proxy so the browser keeps Django's HttpOnly auth cookies.
+      - type: rewrite
+        source: /api/*
+        destination: https://heroesdelcorazon-pabon.onrender.com/api/*
+      # React Router serves client-side routes from the SPA entry point.
+      - type: rewrite
+        source: /*
+        destination: /index.html
+    headers:
+      - path: /api/*
+        name: Cache-Control
+        value: private, no-store, max-age=0

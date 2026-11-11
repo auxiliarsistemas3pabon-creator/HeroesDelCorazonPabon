@@ -1,7 +1,7 @@
-"""Boss-only management of the evaluations: each one has its own categories and their criteria (questions).
+"""Vistas de configuración, programación e importación de evaluaciones.
 
-Every criterion is scored from 1 to 5 (the scale is fixed). A category or criterion that already has
-scores cannot be deleted (it would break the history): it is deactivated and leaves the new forms.
+Las escrituras administrativas requieren jefe o superadmin y respetan pertenencia del formulario.
+Los registros con respuestas se conservan para no romper el historial.
 """
 
 from django.db import transaction
@@ -16,13 +16,20 @@ from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
+from audit.mixins import AuditLogMixin
 from common.permissions import MANAGER_ROLES, IsBossOrSuperAdmin, owned_by
 from users.areas import is_removed_area
 from users.models import User
 
-from .limits import monthly_limit as evaluation_limit, scored_this_month
+from .limits import monthly_limit as evaluation_limit
+from .limits import scored_this_month
 from .models import Category, Criterion, Evaluation, EvaluationSetting, Question
-from .staff_import import AnswersFileError, import_evaluations, read_table
+from .staff_import import (
+    AnswersFileError,
+    import_answers,
+    import_evaluations,
+    read_table,
+)
 
 
 # Category.code and Criterion.code are unique across all evaluations, so slugs get a numeric suffix on collision.
@@ -142,10 +149,12 @@ def _apply_changes(obj, data):
     return None
 
 
-class EvaluationsView(APIView):
-    """GET: the boss sees their own evaluations; a collaborator only sees the open ones.
-    POST (boss): creates an independent evaluation and its categories/questions: {"name": "...", "categories": [...]}.
-    The categories field is optional for compatibility with clients that create them separately."""
+class EvaluationsView(AuditLogMixin, APIView):
+    """GET/POST /questions/evaluations/: lista evaluaciones visibles o crea un formulario independiente.
+
+    Los colaboradores reciben solo formularios abiertos que correspondan a su área/elegibilidad, con su cupo.
+    Jefes y superadmins pueden crear formularios con categorías y criterios; las escrituras las audita AuditLogMixin.
+    """
 
     permission_classes = [IsAuthenticated]
 
@@ -229,8 +238,12 @@ class EvaluationsView(APIView):
         return Response(_evaluation_data(evaluation), status=status.HTTP_201_CREATED)
 
 
-class EvaluationDetailView(APIView):
-    """PATCH evaluation details/open state or DELETE only while it has no answers."""
+class EvaluationDetailView(AuditLogMixin, APIView):
+    """PATCH/DELETE /questions/evaluations/<id>/: edita, cierra o elimina una evaluación sin respuestas.
+
+    El jefe solo modifica sus evaluaciones. Reprogramar inicia una nueva ronda; una evaluación con respuestas
+    no puede eliminarse, para preservar el historial.
+    """
 
     permission_classes = [IsBossOrSuperAdmin]
 
@@ -342,8 +355,8 @@ class EvaluationDetailView(APIView):
         return Response(status=status.HTTP_204_NO_CONTENT)
 
 
-class EvaluationProgramCreateView(APIView):
-    """Creates a separately scheduled copy of an evaluation form."""
+class EvaluationProgramCreateView(AuditLogMixin, APIView):
+    """POST /questions/evaluations/<id>/programs/: crea una copia independiente ya programada."""
 
     permission_classes = [IsBossOrSuperAdmin]
 
@@ -442,10 +455,12 @@ class EvaluationProgramCreateView(APIView):
         return Response(_evaluation_data(programmed), status=status.HTTP_201_CREATED)
 
 
-class CategoriesView(APIView):
-    """GET ?evaluation=<id>: the categories of that evaluation with their criteria (and whether they already
-    have scores). POST: creates a category together with its criteria, inside ONE evaluation:
-    {"evaluation": 1, "name": "...", "criteria": ["question 1", "question 2"]}. Other evaluations are untouched."""
+class CategoriesView(AuditLogMixin, APIView):
+    """GET/POST /questions/categories/: consulta categorías o crea una con criterios en una evaluación.
+
+    GET exige ?evaluation=<id>. POST requiere evaluation, name y una lista criteria; no altera otros formularios.
+    Solo un jefe/superadmin con acceso de escritura puede modificar la evaluación.
+    """
 
     permission_classes = [IsBossOrSuperAdmin]
 
@@ -463,6 +478,8 @@ class CategoriesView(APIView):
         closed_response = _closed(evaluation, request.user)
         if closed_response:
             return closed_response
+        if evaluation.questions.exists():
+            return _bad("evaluation", _("An evaluation with answers cannot be changed."))
         name = _clean(request.data.get("name"))
         raw = request.data.get("criteria")
         questions = [_clean(q) for q in raw] if isinstance(raw, list) else []
@@ -485,8 +502,8 @@ class CategoriesView(APIView):
         return Response(_listing(evaluation), status=status.HTTP_201_CREATED)
 
 
-class CategoryDetailView(APIView):
-    """PATCH {name?, is_active?} or DELETE (only while it has no scores)."""
+class CategoryDetailView(AuditLogMixin, APIView):
+    """PATCH/DELETE /questions/categories/<id>/: actualiza, desactiva o elimina una categoría sin respuestas."""
 
     permission_classes = [IsBossOrSuperAdmin]
 
@@ -497,6 +514,12 @@ class CategoryDetailView(APIView):
         closed_response = _closed(category.evaluation, request.user)
         if closed_response:
             return closed_response
+        if (
+            request.data.get("is_active") is True
+            and not category.is_active
+            and Question.objects.filter(category=category.code).exists()
+        ):
+            return _bad("is_active", _("A category with answers cannot be reactivated."))
         return _apply_changes(category, request.data) or Response(_listing(category.evaluation))
 
     @transaction.atomic
@@ -519,8 +542,8 @@ class CategoryDetailView(APIView):
         return Response(_listing(evaluation))
 
 
-class CategoryCriteriaView(APIView):
-    """POST {name}: adds a question to the category."""
+class CategoryCriteriaView(AuditLogMixin, APIView):
+    """POST /questions/categories/<id>/criteria/: agrega un criterio antes de que haya respuestas."""
 
     permission_classes = [IsBossOrSuperAdmin]
 
@@ -531,6 +554,8 @@ class CategoryCriteriaView(APIView):
         closed_response = _closed(category.evaluation, request.user)
         if closed_response:
             return closed_response
+        if category.evaluation.questions.exists():
+            return _bad("evaluation", _("An evaluation with answers cannot be changed."))
         text = _clean(request.data.get("name"))
         if not text:
             return _bad("name", _("Enter a name."))
@@ -543,8 +568,8 @@ class CategoryCriteriaView(APIView):
         return Response(_listing(category.evaluation), status=status.HTTP_201_CREATED)
 
 
-class CriterionDetailView(APIView):
-    """PATCH {name?, is_active?} or DELETE (only while it has no scores)."""
+class CriterionDetailView(AuditLogMixin, APIView):
+    """PATCH/DELETE /questions/criteria/<id>/: actualiza, desactiva o elimina un criterio sin respuestas."""
 
     permission_classes = [IsBossOrSuperAdmin]
 
@@ -555,6 +580,12 @@ class CriterionDetailView(APIView):
         closed_response = _closed(criterion.category.evaluation, request.user)
         if closed_response:
             return closed_response
+        if (
+            request.data.get("is_active") is True
+            and not criterion.is_active
+            and Question.objects.filter(criterion=criterion.code).exists()
+        ):
+            return _bad("is_active", _("A question with answers cannot be reactivated."))
         return _apply_changes(criterion, request.data) or Response(_listing(criterion.category.evaluation))
 
     def delete(self, request, pk):
@@ -574,10 +605,11 @@ class CriterionDetailView(APIView):
         return Response(_listing(evaluation))
 
 
-class EvaluationImportView(APIView):
-    """Boss: imports evaluation forms from rows of evaluation, category and question names.
+class EvaluationImportView(AuditLogMixin, APIView):
+    """POST /questions/import/: jefe o superadmin importa formularios desde Excel o CSV.
 
-    Repeated rows form one evaluation with multiple categories/questions. Existing evaluations are skipped.
+    Cada fila indica evaluación, categoría y criterio; evaluaciones existentes se omiten.
+    Los errores de lectura producen HTTP 400 y la operación de importación se ejecuta en una transacción.
     """
 
     permission_classes = [IsBossOrSuperAdmin]
@@ -592,6 +624,30 @@ class EvaluationImportView(APIView):
             table = read_table(file, file.name)
             with transaction.atomic():
                 result = import_evaluations(table, created_by=request.user)
+        except AnswersFileError as exc:
+            return Response({"detail": str(exc)}, status=status.HTTP_400_BAD_REQUEST)
+        return Response(result)
+
+
+class AnswersImportView(AuditLogMixin, APIView):
+    """POST /questions/answers/import/: jefe o superadmin carga entregas desde Excel o CSV."""
+
+    permission_classes = [IsBossOrSuperAdmin]
+    parser_classes = [MultiPartParser]
+
+    def post(self, request):
+        file = request.FILES.get("file")
+        if file is None:
+            return _bad("file", _("Attach an Excel (.xlsx) or CSV file."))
+        raw_evaluation = request.data.get("evaluation")
+        default_evaluation = None
+        if raw_evaluation not in (None, ""):
+            default_evaluation = _evaluation_of(raw_evaluation, request.user)
+            if default_evaluation is None:
+                return _bad("evaluation", _("Choose an evaluation."))
+        try:
+            table = read_table(file, file.name)
+            result = import_answers(table, default_evaluation)
         except AnswersFileError as exc:
             return Response({"detail": str(exc)}, status=status.HTTP_400_BAD_REQUEST)
         return Response(result)

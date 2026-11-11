@@ -1,3 +1,5 @@
+"""Vistas para responder evaluaciones, consultar resultados y obtener indicadores."""
+
 from django.db import transaction
 from django.db.models import Avg, Count, Max
 from django.utils import timezone
@@ -8,7 +10,13 @@ from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
-from common.permissions import MANAGER_ROLES, IsBossOrSuperAdmin, owned_by, IsCollaborator
+from audit.mixins import AuditLogMixin
+from common.permissions import (
+    MANAGER_ROLES,
+    IsBossOrSuperAdmin,
+    IsCollaborator,
+    owned_by,
+)
 from users.models import User
 
 from .limits import assigned_personal, find_evaluation, monthly_limit, scored_this_month
@@ -58,12 +66,12 @@ def _in_range(request, qs, field="created_at"):
         qs = qs.filter(**{f"{field}__date__lte": end})
     return qs
 
-class QuestionFormView(APIView):
-    """Categories and criteria of ONE evaluation (?evaluation=<id>; optional when there is a single open one).
+class QuestionFormView(AuditLogMixin, APIView):
+    """GET /questions/form/: devuelve categorías y criterios de una evaluación.
 
-    Only the active ones, unless ?include_inactive=1. The read-only tables (review, results) ask for the
-    inactive ones too (and for closed evaluations) to show old evaluations. A collaborator only gets the
-    form of an open evaluation to answer it.
+    Acepta ?evaluation=<id>; sin ID solo resuelve si hay una única evaluación abierta.
+    Por defecto lista elementos activos; ?include_inactive=1 permite consultar el formulario histórico.
+    Los colaboradores solo ven evaluaciones abiertas habilitadas para su área.
     """
 
     permission_classes = [IsAuthenticated]
@@ -100,9 +108,13 @@ class QuestionFormView(APIView):
         return Response(data)
 
 
-class QuestionsView(APIView):
-    """GET: the boss sees every score, a collaborator only the approved ones they received.
-    POST: a collaborator scores a colleague of their area (12 criteria)."""
+class QuestionsView(AuditLogMixin, APIView):
+    """GET/POST /questions/: consulta calificaciones o registra una entrega completa.
+
+    La lectura requiere sesión; el colaborador ve respuestas recibidas y los responsables ven las
+    respuestas administrativas. POST es solo para colaboradores y valida área, formulario, cupo y criterios.
+    Las nuevas respuestas se guardan en una transacción y generan notificación después del commit.
+    """
 
     # Only collaborators may submit scores; any authenticated user may read (the queryset is filtered by role in get()).
     def get_permissions(self):
@@ -155,10 +167,10 @@ def _grouped(qs):
     return list(groups.values())
 
 
-class SubmissionsView(APIView):
-    """Evaluations sent by the collaborators, newest first.
+class SubmissionsView(AuditLogMixin, APIView):
+    """GET /questions/submissions/: responsables consultan entregas agrupadas, de más nueva a más antigua.
 
-    Read-only for the boss: an evaluation counts as soon as it is sent.
+    Acepta filtros opcionales evaluation y personal; el alcance del jefe se restringe a su área.
     """
 
     permission_classes = [IsBossOrSuperAdmin]
@@ -180,8 +192,8 @@ class SubmissionsView(APIView):
         return Response(_grouped(qs))
 
 
-class SentView(APIView):
-    """The evaluations the logged collaborator has sent, newest first."""
+class SentView(AuditLogMixin, APIView):
+    """GET /questions/sent/: devuelve las entregas del colaborador autenticado, de más nueva a más antigua."""
 
     permission_classes = [IsCollaborator]
 
@@ -189,8 +201,8 @@ class SentView(APIView):
         return Response(_grouped(Question.objects.filter(collaborator=request.user)))
 
 
-class ResultsView(APIView):
-    """Final score (average of the scores) of the logged user: overall and, for each evaluation, by category."""
+class ResultsView(AuditLogMixin, APIView):
+    """GET /questions/results/: resultados recibidos por el usuario, con promedio general y por formulario/categoría."""
 
     permission_classes = [IsAuthenticated]
 
@@ -221,10 +233,11 @@ class ResultsView(APIView):
         })
 
 
-class ResultsSummaryView(APIView):
-    """Boss: scores for their own evaluations, by category and overall, for one or all (?evaluation=all).
+class ResultsSummaryView(AuditLogMixin, APIView):
+    """GET /questions/results-summary/: responsables consultan promedios por persona, categoría y evaluación.
 
-    Without ?evaluation it uses the first evaluation that has answers. The boss of an area only sees people of it.
+    Acepta ?evaluation=<id> o ?evaluation=all; sin filtro usa una evaluación disponible. Admite filtros de fecha
+    y restringe las personas al área del jefe cuando tiene una asignada.
     """
 
     permission_classes = [IsBossOrSuperAdmin]
@@ -282,9 +295,11 @@ class ResultsSummaryView(APIView):
         })
 
 
-class CategoryAveragesView(APIView):
-    """Boss: average of the scores by category, for one person (?personal=<id>) and/or one evaluation
-    (?evaluation=<id>); without them, for everyone and every evaluation."""
+class CategoryAveragesView(AuditLogMixin, APIView):
+    """GET /questions/category-averages/: responsables consultan promedios por categoría.
+
+    Puede filtrar por persona, evaluación, área, cargo y rango de fechas; score 0 se excluye de los promedios.
+    """
 
     permission_classes = [IsBossOrSuperAdmin]
 
@@ -332,8 +347,8 @@ class CategoryAveragesView(APIView):
 
 # Scope: a boss with an area only sees people of that area; a boss without area only counts people already evaluated
 # in their own evaluations (hence the pk__in filter on own_answers below).
-class StatsView(APIView):
-    """Count of evaluated (approved) vs pending collaborators, total and per area, for the dashboard."""
+class StatsView(AuditLogMixin, APIView):
+    """GET /questions/stats/: responsables consultan totales evaluados/pendientes por área y globales."""
 
     permission_classes = [IsBossOrSuperAdmin]
 
@@ -365,8 +380,8 @@ class StatsView(APIView):
         })
 
 
-class SettingsView(APIView):
-    """Boss: reads and sets a monthly colleague limit globally or for one evaluation."""
+class SettingsView(AuditLogMixin, APIView):
+    """GET/PUT /questions/settings/: responsables consultan y actualizan límites mensuales de envío."""
 
     permission_classes = [IsBossOrSuperAdmin]
 
@@ -408,9 +423,8 @@ class SettingsView(APIView):
         return Response(data)
 
 
-class QuotaView(APIView):
-    """How many colleagues the collaborator can still score this month in an evaluation (?evaluation=<id>),
-    and who was already scored."""
+class QuotaView(AuditLogMixin, APIView):
+    """GET /questions/quota/: colaborador consulta cupo mensual, personas ya evaluadas y asignación aleatoria."""
 
     permission_classes = [IsCollaborator]
 
@@ -429,12 +443,11 @@ class QuotaView(APIView):
 
 # Scope trap: the boss branch counts only collaborators, while the collaborator branch counts every active user
 # (bosses included) of their own area.
-class DashboardView(APIView):
-    """Staff and evaluated-people counts (per area and overall) for the dashboard of both roles.
+class DashboardView(AuditLogMixin, APIView):
+    """GET /questions/dashboard/: devuelve personal e indicadores de evaluados para el usuario autenticado.
 
-    evaluated = distinct people who already have an evaluation (a score reviewed by the boss).
-    Optional ?date_from / ?date_to (YYYY-MM-DD): the evaluations are the ones sent in that range and
-    the staff are the users registered in that range.
+    Acepta date_from/date_to en YYYY-MM-DD. El alcance por área y rol se aplica antes de construir conteos,
+    desglose por área y personas.
     """
 
     permission_classes = [IsAuthenticated]
@@ -457,8 +470,10 @@ class DashboardView(APIView):
         for row in users.values("area").annotate(n=Count("id")):
             staff[row["area"] or "-"] = row["n"]
 
+        if request.user.area:
+            own_answers = own_answers.filter(personal__area=request.user.area)
         evaluated = {}
-        for row in own_answers.filter(personal__in=users).values("area").annotate(n=Count("personal", distinct=True)):
+        for row in own_answers.values("area").annotate(n=Count("personal", distinct=True)):
             evaluated[row["area"] or "-"] = row["n"]
 
         areas = sorted(set(staff) | set(evaluated))
@@ -466,7 +481,7 @@ class DashboardView(APIView):
             {"area": area, "staff": staff.get(area, 0), "evaluated": evaluated.get(area, 0)}
             for area in areas
         ]
-        total_evaluated = own_answers.filter(personal__in=users).values("personal").distinct().count()
+        total_evaluated = own_answers.values("personal").distinct().count()
         people = list(users.values("id", "first_name", "last_name", "role", "area", "position").order_by("first_name", "last_name"))
         return Response({
             "staff": sum(staff.values()),

@@ -1,2 +1,8 @@
 .vscode/
 back/
+
+# Local environment variables and secrets.
+.env
+.env.*
+**/.env
+**/.env.*

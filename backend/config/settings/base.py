@@ -58,7 +58,7 @@ LOCAL_APPS: list[str] = [
 
 AUTH_USER_MODEL = "users.User"
 
-INSTALLED_APPS = DJANGO_APPS + THIRD_PARTY_APPS + LOCAL_APPS
+INSTALLED_APPS = ["daphne", "channels"] + DJANGO_APPS + THIRD_PARTY_APPS + LOCAL_APPS
 
 # El orden importa: CorsMiddleware va primero y AxesMiddleware al final.
 MIDDLEWARE = [
@@ -101,17 +101,55 @@ TEMPLATES = [
 
 WSGI_APPLICATION = 'config.wsgi.application'
 
-# DATABASE POSTGRES
-DATABASES = {
-    "default": {
-        "ENGINE": "django.db.backends.postgresql",
-        "NAME": os.getenv("POSTGRES_DB", default="HeroesDelCorazon"),
-        "USER": os.getenv("POSTGRES_USER", default="heroes_user"),
-        "PASSWORD": os.getenv("POSTGRES_PASSWORD", default="heroes_pass"),
-        "HOST": os.getenv("POSTGRES_HOST", default="localhost"),
-        "PORT": os.getenv("POSTGRES_PORT", default="5432"),
+# PostgreSQL remains the default; SQL Server is selected explicitly per environment.
+DATABASE_ENGINE = os.getenv("DATABASE_ENGINE", default="postgresql").lower()
+if DATABASE_ENGINE in {"mssql", "sqlserver", "sql_server"}:
+    DATABASES = {
+        "default": {
+            "ENGINE": "mssql",
+            "NAME": os.getenv("SQLSERVER_DB", default="heroesdelcorazon"),
+            "USER": os.getenv("SQLSERVER_USER", default="heroes_user"),
+            "PASSWORD": os.getenv("SQLSERVER_PASSWORD", default=""),
+            "HOST": os.getenv("SQLSERVER_HOST", default="localhost"),
+            "PORT": os.getenv("SQLSERVER_PORT", default="1433"),
+            "OPTIONS": {
+                "driver": os.getenv("SQLSERVER_DRIVER", default="ODBC Driver 18 for SQL Server"),
+                "extra_params": os.getenv(
+                    "SQLSERVER_EXTRA_PARAMS",
+                    default="Encrypt=yes;TrustServerCertificate=yes",
+                ),
+            },
+        }
     }
-}
+elif DATABASE_ENGINE in {"postgres", "postgresql"}:
+    database_url = os.getenv("DATABASE_URL")
+    if database_url:
+        # Render provides PostgreSQL connection details as a single URL.
+        DATABASES = {"default": env.db_url_config(database_url)}
+    else:
+        DATABASES = {
+            "default": {
+                "ENGINE": "django.db.backends.postgresql",
+                "NAME": os.getenv("POSTGRES_DB", default="heroesdelcorazon"),
+                "USER": os.getenv("POSTGRES_USER", default="heroes_user"),
+                "PASSWORD": os.getenv("POSTGRES_PASSWORD", default="heroes_pass"),
+                "HOST": os.getenv("POSTGRES_HOST", default="localhost"),
+                "PORT": os.getenv("POSTGRES_PORT", default="5432"),
+            }
+        }
+else:
+    raise ValueError("DATABASE_ENGINE must be 'mssql' or 'postgresql'.")
+
+# Optional read source used once by the explicit PostgreSQL-to-SQL Server transfer command.
+if os.getenv("SOURCE_POSTGRES_DB"):
+    DATABASES["source_postgres"] = {
+        "ENGINE": "django.db.backends.postgresql",
+        "NAME": os.environ["SOURCE_POSTGRES_DB"],
+        "USER": os.getenv("SOURCE_POSTGRES_USER", default="heroes_user"),
+        "PASSWORD": os.getenv("SOURCE_POSTGRES_PASSWORD", default=""),
+        "HOST": os.getenv("SOURCE_POSTGRES_HOST", default="localhost"),
+        "PORT": os.getenv("SOURCE_POSTGRES_PORT", default="5432"),
+    }
 
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 
@@ -131,7 +169,7 @@ USE_I18N = True
 USE_TZ = True
 
 # STATIC / MEDIA
-STATIC_URL = 'static/'
+STATIC_URL = '/static/'
 STATIC_ROOT = BASE_DIR / 'staticfiles'
 
 # REST_FRAMEWORK CONFIG
@@ -159,6 +197,23 @@ REST_FRAMEWORK = {
         "anon": os.getenv("THROTTLE_RATE_ANON", default="200/min"),
         "user": os.getenv("THROTTLE_RATE_USER", default="1000/min"),
         "login": os.getenv("THROTTLE_RATE_LOGIN", default="500/min"),
+    },
+}
+
+ASGI_APPLICATION = "config.asgi.application"
+# Render exposes the linked Key Value connection as REDIS_URL. Prefer it over
+# a stale Docker-only CHANNELS_REDIS_URL (for example redis://redis:6379/3).
+CHANNELS_REDIS_URL = (
+    os.getenv("REDIS_URL")
+    or os.getenv("CHANNELS_REDIS_URL")
+    or "redis://localhost:6379/3"
+)
+CHANNEL_LAYERS = {
+    "default": {
+        "BACKEND": "channels_redis.core.RedisChannelLayer",
+        "CONFIG": {
+            "hosts": [CHANNELS_REDIS_URL],
+        },
     },
 }
 
@@ -238,17 +293,32 @@ CONTENT_SECURITY_POLICY = {
     }
 }
 
-#  CORS / CSRF CONFIG
-CORS_ALLOWED_ORIGINS = env("CORS_ALLOWED_ORIGINS")
-CSRF_TRUSTED_ORIGINS = env("CSRF_TRUSTED_ORIGINS") or env("CORS_ALLOWED_ORIGINS")
+# FRONTEND
+FRONTEND_BASE_URL = os.getenv(
+    "FRONTEND_BASE_URL", default="http://127.0.0.1:5173"
+).rstrip("/")
+
+# Vercel preview deployment currently used for this project. Keep this exact
+# host scoped; preview deployment URLs can change and must then be updated.
+VERCEL_PREVIEW_ORIGIN = "https://heroes-del-corazon-pabon-58i8y4oqa.vercel.app"
+
+# CORS / CSRF CONFIG. Always allow the configured frontend's exact origin.
+CORS_ALLOWED_ORIGINS = list(dict.fromkeys([
+    *env("CORS_ALLOWED_ORIGINS"),
+    FRONTEND_BASE_URL,
+    VERCEL_PREVIEW_ORIGIN,
+]))
+CSRF_TRUSTED_ORIGINS = list(
+    dict.fromkeys([
+        *(env("CSRF_TRUSTED_ORIGINS") or env("CORS_ALLOWED_ORIGINS")),
+        FRONTEND_BASE_URL,
+        VERCEL_PREVIEW_ORIGIN,
+    ])
+)
 # Credenciales (cookies httpOnly) exigen un origen concreto, nunca '*'.
 # En prod nginx unifica origen y esto no se usa; en dev Vite puede proxear
 # /api o hablar directo a :8000 (login desde localhost:5173).
 CORS_ALLOW_CREDENTIALS = True
-
-# FRONTEND 
-FRONTEND_BASE_URL = os.getenv("FRONTEND_BASE_URL", default="http://127.0.0.1:5173")
-
 
 # Email Config
 EMAIL_BACKEND = os.getenv(
@@ -275,11 +345,18 @@ LOGGING = {
             "format": "[{asctime}] {levelname} {name}: {message}",
             "style": "{",
         },
+        "audit_json": {
+            "()": "audit.logging.AuditJSONFormatter",
+        },
     },
     "handlers": {
         "console": {
             "class": "logging.StreamHandler",
             "formatter": "simple",
+        },
+        "audit_console": {
+            "class": "logging.StreamHandler",
+            "formatter": "audit_json",
         },
     },
     "root": {
@@ -295,6 +372,11 @@ LOGGING = {
         "django.security": {
             "handlers": ["console"],
             "level": "WARNING",
+            "propagate": False,
+        },
+        "audit": {
+            "handlers": ["audit_console"],
+            "level": "INFO",
             "propagate": False,
         },
     },

@@ -1,6 +1,20 @@
 from django.db import migrations
 
 
+def translate_roles(apps, schema_editor, reverse=False):
+    User = apps.get_model('users', 'User')
+    alias = schema_editor.connection.alias
+    pairs = [('jefe', 'boss'), ('colaborador', 'collaborator')]
+    if reverse:
+        pairs = [(new, old) for old, new in pairs]
+    for old, new in pairs:
+        User.objects.using(alias).filter(rol=old).update(rol=new)
+
+
+def untranslate_roles(apps, schema_editor):
+    translate_roles(apps, schema_editor, reverse=True)
+
+
 class Migration(migrations.Migration):
     """Keeps the data: jefe -> boss, colaborador -> collaborator."""
 
@@ -9,14 +23,5 @@ class Migration(migrations.Migration):
     ]
 
     operations = [
-        migrations.RunSQL(
-            sql="""
-                UPDATE users_user SET rol = 'boss' WHERE rol = 'jefe';
-                UPDATE users_user SET rol = 'collaborator' WHERE rol = 'colaborador';
-            """,
-            reverse_sql="""
-                UPDATE users_user SET rol = 'jefe' WHERE rol = 'boss';
-                UPDATE users_user SET rol = 'colaborador' WHERE rol = 'collaborator';
-            """,
-        ),
+        migrations.RunPython(translate_roles, untranslate_roles),
     ]

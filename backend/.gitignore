@@ -4,7 +4,6 @@ __pycache__/
 *$py.class
 *.so
 
-heroes_corazon.sql
 
 # Distribution / packaging
 .Python
@@ -20,6 +19,11 @@ env/
 ENV/
 biometricapi_env/
 
+heroes_corazon.sql
+
+#data
+data/
+
 # Django
 *.log
 local_settings.py
@@ -33,7 +37,6 @@ staticfiles/
 # Environments
 .env
 .env.*
-!.env.example
 
 # IDEs
 .vscode/
