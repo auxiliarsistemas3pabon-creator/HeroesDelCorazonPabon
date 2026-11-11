@@ -22,7 +22,7 @@ function Home() {
 
 function StaffRoute() {
   const { user } = useAuth()
-  return user.role === 'superadmin' ? <StaffImportPage /> : <Navigate to="/" replace />
+  return user.role === 'superadmin' ? <StaffImportPage /> : <Navigate to="/dashboard" replace />
 }
 
 // Rutas: /login y /change-password van fuera de <Layout>; el resto se renderiza dentro de Layout, que exige sesión
@@ -45,7 +45,7 @@ function App() {
             <Route path="/program" element={<FormProgramPage/>} />
             {/* Solo el superadmin carga datos; el backend lo exige igualmente */}
             <Route path="/staff" element={<StaffRoute />} />
-            {/* Cualquier ruta desconocida vuelve a Home, que decide según el rol */}
+            {/* Cualquier ruta desconocida vuelve al destino autenticado por rol */}
             <Route path="*" element={<Navigate to="/dashboard" replace />} />
           </Route>
         </Routes>

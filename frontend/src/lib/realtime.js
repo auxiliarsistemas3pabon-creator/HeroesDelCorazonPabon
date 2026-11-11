@@ -1,6 +1,18 @@
 const RETRY_BASE_MS = 1000
 const RETRY_MAX_MS = 30000
 
+function websocketUrl() {
+  // En Vercel no existe un proxy para /ws: conecta directamente con Django/Channels en Render.
+  // En desarrollo, VITE_API_URL suele apuntar al backend local; si queda vacía, usa el proxy de Vite.
+  const apiOrigin = import.meta.env.VITE_API_URL || window.location.origin
+  const url = new URL(apiOrigin, window.location.origin)
+  url.protocol = url.protocol === 'https:' ? 'wss:' : 'ws:'
+  url.pathname = '/ws/events/'
+  url.search = ''
+  url.hash = ''
+  return url.toString()
+}
+
 export function connectRealtime({ onStatus, onEvent, refreshSession }) {
   let socket
   let retryTimer
@@ -20,8 +32,7 @@ export function connectRealtime({ onStatus, onEvent, refreshSession }) {
 
   function connect() {
     if (stopped) return
-    const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:'
-    socket = new WebSocket(`${protocol}//${window.location.host}/ws/events/`)
+    socket = new WebSocket(websocketUrl())
     onStatus('connecting')
 
     socket.onopen = () => {

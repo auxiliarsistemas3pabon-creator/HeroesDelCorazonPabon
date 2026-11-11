@@ -10,6 +10,8 @@ export default defineConfig(({ mode }) => {
 
   return {
     plugins: [react(), tailwindcss()],
+    // Mantener el mismo transform JSX automático de React en Vitest y en el build.
+    esbuild: { jsx: 'automatic' },
     server: {
       // API y WebSocket usan el mismo origen del navegador; Vite reenvía ambos al backend.
       proxy: {
@@ -22,13 +24,16 @@ export default defineConfig(({ mode }) => {
     },
     test: {
       environment: 'jsdom',
-      globals:true,
+      globals: true,
       setupFiles: './src/test/setup.js',
-      
+      include: ['src/**/*.{test,spec}.{js,jsx}'],
+      clearMocks: true,
+      restoreMocks: true,
       coverage: {
         provider: 'v8',
-        reporter: ['text','html'],
-        include: ['src/**/*']
+        reporter: ['text', 'html'],
+        include: ['src/**/*.{js,jsx}'],
+        exclude: ['src/**/*.test.{js,jsx}', 'src/**/test/**'],
       }
     }
   }
