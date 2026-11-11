@@ -198,7 +198,10 @@ class EvaluationsView(AuditLogMixin, APIView):
     @transaction.atomic
     def post(self, request):
         if request.user.role not in MANAGER_ROLES:
-            return Response(status=status.HTTP_403_FORBIDDEN)
+            return Response(
+                {"detail": _("Only an area boss or superadmin can create evaluations.")},
+                status=status.HTTP_403_FORBIDDEN,
+            )
         name = _clean(request.data.get("name"))
         if not name:
             return _bad("name", _("Enter a name."))
