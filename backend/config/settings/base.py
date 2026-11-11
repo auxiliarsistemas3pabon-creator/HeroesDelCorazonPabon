@@ -201,11 +201,18 @@ REST_FRAMEWORK = {
 }
 
 ASGI_APPLICATION = "config.asgi.application"
+# Render exposes the linked Key Value connection as REDIS_URL. Prefer it over
+# a stale Docker-only CHANNELS_REDIS_URL (for example redis://redis:6379/3).
+CHANNELS_REDIS_URL = (
+    os.getenv("REDIS_URL")
+    or os.getenv("CHANNELS_REDIS_URL")
+    or "redis://localhost:6379/3"
+)
 CHANNEL_LAYERS = {
     "default": {
         "BACKEND": "channels_redis.core.RedisChannelLayer",
         "CONFIG": {
-            "hosts": [os.getenv("CHANNELS_REDIS_URL", "redis://localhost:6379/3")],
+            "hosts": [CHANNELS_REDIS_URL],
         },
     },
 }

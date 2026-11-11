@@ -5,6 +5,7 @@ Endurece la seguridad y desactiva DEBUG. Las variables sensibles deben venir
 exclusivamente de variables de entorno.
 """
 from django.core.exceptions import ImproperlyConfigured
+import os
 
 from .base import *  # noqa: F401,F403
 
@@ -29,6 +30,11 @@ SECURE_PROXY_SSL_HEADER = ("HTTP_X_FORWARDED_PROTO", "https")
 SESSION_COOKIE_SECURE = True
 CSRF_COOKIE_SECURE = True
 AUTH_COOKIE_SECURE = True
+# Vercel and Render use different sites, so browsers require cross-site auth
+# cookies. Secure is already forced above for this production settings module.
+AUTH_COOKIE_SAMESITE = os.getenv("AUTH_COOKIE_SAMESITE", "None")
+CSRF_COOKIE_SAMESITE = AUTH_COOKIE_SAMESITE
+SESSION_COOKIE_SAMESITE = AUTH_COOKIE_SAMESITE
 # Render proxies las solicitudes y Django recibe REMOTE_ADDR como 127.0.0.1.
 # Axes debe usar la IP del cliente que Render reenvía en X-Forwarded-For para
 # que el bloqueo por (usuario, IP) no sea compartido entre visitantes.
