@@ -33,7 +33,7 @@ export function LoginPage() {
     setLoading(true)
     try {
       // login devuelve el usuario para decidir el destino sin esperar a que el contexto se actualice.
-      const authenticatedUser = await login(form)
+      const authenticatedUser = await login({ ...form, username: form.username.trim() })
       navigate(authenticatedUser.password_change_required ? '/change-password' : authenticatedUser.role === 'boss' || authenticatedUser.role === 'superadmin' ? '/dashboard' : '/evaluations', { replace: true })
     } catch (err) {
       setError(errorMessage(err, 'Credenciales inválidas'))

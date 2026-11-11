@@ -32,6 +32,7 @@ export function errorMessage(error, fallback = 'Ocurrió un error') {
   if (error?.status >= 502) return 'El servidor no está disponible en este momento. Intenta de nuevo en unos segundos.'
   if (error instanceof TypeError) return 'No hay conexión con el servidor. Revisa tu red e intenta de nuevo.'
   const data = error?.data
+  if (error?.status === 404) return 'No se encontró la ruta solicitada. Actualiza el frontend de Vercel para aplicar la ruta de la API.'
   if (!data) return fallback
   if (typeof data.detail === 'string') return data.detail
   const first = Object.values(data).flat()[0]
