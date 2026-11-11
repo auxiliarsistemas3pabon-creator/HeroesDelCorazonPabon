@@ -1,8 +1,13 @@
 {
+  "$schema": "https://openapi.vercel.sh/vercel.json",
   "rewrites": [
     {
-      "source": "/api/v1/:path*",
-      "destination": "https://heroesdelcorazon-pabon.onrender.com/api/v1/:path*"
+      "source": "/api/:path*",
+      "destination": "https://heroesdelcorazon-pabon.onrender.com/api/:path*"
+    },
+    {
+      "source": "/(.*)",
+      "destination": "/index.html"
     }
   ]
 }

@@ -2,10 +2,9 @@
 // peticiones que modifican datos llevan el token CSRF de la cookie `csrftoken`.
 // En producción la API usa el mismo origen del frontend (Vercel la reenvía a Render).
 // Así las cookies httpOnly de sesión son first-party y no dependen de cookies de terceros.
-const DEFAULT_PRODUCTION_API_ORIGIN = 'https://heroesdelcorazon-pabon.onrender.com'
-const configuredApiOrigin = (import.meta.env.VITE_API_URL || DEFAULT_PRODUCTION_API_ORIGIN)
+const configuredApiOrigin = (import.meta.env.VITE_API_URL || '')
   .replace(/\/api\/v1\/?$/, '').replace(/\/$/, '')
-const API_ORIGIN = import.meta.env.PROD ? '' : (import.meta.env.VITE_API_URL ? configuredApiOrigin : '')
+const API_ORIGIN = import.meta.env.PROD ? '' : configuredApiOrigin
 const BASE = `${API_ORIGIN}/api/v1`
 let csrfTokenValue = ''
 
@@ -33,7 +32,7 @@ export function errorMessage(error, fallback = 'Ocurrió un error') {
   if (error?.status >= 502) return 'El servidor no está disponible en este momento. Intenta de nuevo en unos segundos.'
   if (error instanceof TypeError) return 'No hay conexión con el servidor. Revisa tu red e intenta de nuevo.'
   const data = error?.data
-  if (error?.status === 404) return 'No se encontró la ruta de la API. Comprueba VITE_API_URL y el endpoint solicitado.'
+  if (error?.status === 404) return 'El servidor no encontró esta ruta de la API. Verifica el despliegue y la ruta solicitada.'
   if (!data) return fallback
   if (typeof data.detail === 'string') return data.detail
   const first = Object.values(data).flat()[0]
