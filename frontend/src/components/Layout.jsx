@@ -31,6 +31,8 @@ const ROLE_LABELS = { boss: 'Coordinador', superadmin: 'Administrador', collabor
 export function Layout() {
   const { user, loading, logout, realtimeStatus, realtimeNotice } = useAuth()
   const [open, setOpen] = useState(false)
+  const realtimeConnected = realtimeStatus === 'connected'
+  const realtimeUnavailable = realtimeStatus === 'unavailable'
 
   // Mientras AuthContext consulta /auth/me/ no se redirige: evitaría un rebote a /login en cada recarga.
   if (loading) return null
@@ -67,13 +69,21 @@ export function Layout() {
             <span
               className="hidden items-center gap-1.5 text-xs text-app-muted sm:flex"
               role="status"
-              aria-label={realtimeStatus === 'connected' ? 'WebSocket conectado' : 'WebSocket reconectando'}
+              aria-label={realtimeConnected
+                ? 'WebSocket conectado'
+                : realtimeUnavailable
+                  ? 'Actualizaciones en tiempo real no disponibles'
+                  : 'WebSocket reconectando'}
             >
               <span className={cn(
                 'h-2 w-2 rounded-full',
-                realtimeStatus === 'connected' ? 'bg-green-500' : 'bg-amber-500',
+                realtimeConnected ? 'bg-green-500' : realtimeUnavailable ? 'bg-gray-400' : 'bg-amber-500',
               )} />
-              {realtimeStatus === 'connected' ? 'En vivo' : 'Reconectando'}
+              {realtimeConnected
+                ? 'En vivo'
+                : realtimeUnavailable
+                  ? 'Tiempo real no disponible'
+                  : 'Reconectando'}
             </span>
             <div className="hidden items-center gap-2 rounded-lg border border-app bg-app-muted px-3 py-2 sm:flex">
               <User size={16} className="text-app-muted" />

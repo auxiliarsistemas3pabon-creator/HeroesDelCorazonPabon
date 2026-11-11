@@ -1,6 +1,10 @@
 // Cliente de la API. Las cookies httpOnly viajan solas (credentials) y las
 // peticiones que modifican datos llevan el token CSRF de la cookie `csrftoken`.
-const API_ORIGIN = (import.meta.env.VITE_API_URL || '').replace(/\/$/, '')
+// En producción Vercel reenvía /api al backend por el mismo origen. Así las
+// cookies httpOnly son first-party; en desarrollo se mantiene la URL directa.
+const API_ORIGIN = import.meta.env.PROD
+  ? window.location.origin
+  : (import.meta.env.VITE_API_URL || '').replace(/\/$/, '')
 const BASE = `${API_ORIGIN}/api/v1`
 let csrfTokenValue = ''
 
