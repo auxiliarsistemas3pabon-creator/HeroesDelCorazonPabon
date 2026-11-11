@@ -8,7 +8,7 @@ import { Button } from './ui/Button'
 // Menú lateral por rol (`user.role`: 'boss' | 'superadmin' | 'collaborator'). Es solo navegación: el control
 // real de acceso lo hace el backend; ocultar un enlace aquí no protege la ruta.
 const BOSS_LINKS = [
-  { to: '/', label: 'Dashboard', icon: LayoutDashboard, end: true },
+  { to: '/dashboard', label: 'Dashboard', icon: LayoutDashboard, end: true },
   { to: '/results', label: 'Resultados', icon: Trophy },
   { to: '/create', label: 'Crear Evaluacion', icon: ListPlus },
   { to: '/program', label: 'Programar evaluación', icon: ListPlus },

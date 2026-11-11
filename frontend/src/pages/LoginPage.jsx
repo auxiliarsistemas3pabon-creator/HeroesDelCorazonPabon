@@ -23,7 +23,7 @@ export function LoginPage() {
   const [error, setError] = useState(null)
   const [loading, setLoading] = useState(false)
 
-  if (user) return <Navigate to={user.password_change_required ? '/change-password' : '/'} replace />
+  if (user) return <Navigate to={user.password_change_required ? '/change-password' : user.role === 'boss' || user.role === 'superadmin' ? '/dashboard' : '/evaluations'} replace />
 
   const onChange = (e) => setForm((prev) => ({ ...prev, [e.target.name]: e.target.value }))
 
@@ -34,7 +34,7 @@ export function LoginPage() {
     try {
       // login devuelve el usuario para decidir el destino sin esperar a que el contexto se actualice.
       const authenticatedUser = await login(form)
-      navigate(authenticatedUser.password_change_required ? '/change-password' : '/', { replace: true })
+      navigate(authenticatedUser.password_change_required ? '/change-password' : authenticatedUser.role === 'boss' || authenticatedUser.role === 'superadmin' ? '/dashboard' : '/evaluations', { replace: true })
     } catch (err) {
       setError(errorMessage(err, 'Credenciales inválidas'))
     } finally {

@@ -103,6 +103,12 @@ describe('App.jsx - Rutas, autenticación y permisos', () => {
     expect(screen.getByText('LoginPage')).toBeInTheDocument()
   })
 
+  it('debe mostrar Login en la ruta raíz', () => {
+    renderApp('/')
+
+    expect(screen.getByText('LoginPage')).toBeInTheDocument()
+  })
+
   it('debe mostrar cambio de contraseña', () => {
     renderApp('/change-password')
 
@@ -165,14 +171,14 @@ describe('App.jsx - Rutas, autenticación y permisos', () => {
         realtimeNotice: '',
       })
 
-      renderApp('/')
+      renderApp('/dashboard')
 
       expect(screen.getByText('DashboardPage')).toBeInTheDocument()
     }
   )
 
   it('debe redirigir collaborator a evaluaciones', () => {
-    renderApp('/')
+    renderApp('/dashboard')
 
     expect(screen.getByText('EvaluationPage')).toBeInTheDocument()
   })
