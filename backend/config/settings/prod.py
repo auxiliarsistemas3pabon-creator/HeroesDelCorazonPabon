@@ -35,6 +35,21 @@ AUTH_COOKIE_SECURE = True
 AUTH_COOKIE_SAMESITE = os.getenv("AUTH_COOKIE_SAMESITE", "None")
 CSRF_COOKIE_SAMESITE = AUTH_COOKIE_SAMESITE
 SESSION_COOKIE_SAMESITE = AUTH_COOKIE_SAMESITE
+# No asumir el hostname `redis` de Docker en Render. Si hay un Redis/Key Value
+# enlazado, Render entrega REDIS_URL; sin él, Channels usa memoria y no bloquea
+# las solicitudes HTTP ni genera errores de DNS al cerrar conexiones WebSocket.
+_render_redis_url = os.getenv("REDIS_URL")
+if _render_redis_url:
+    CHANNEL_LAYERS = {
+        "default": {
+            "BACKEND": "channels_redis.core.RedisChannelLayer",
+            "CONFIG": {"hosts": [_render_redis_url]},
+        }
+    }
+else:
+    CHANNEL_LAYERS = {
+        "default": {"BACKEND": "channels.layers.InMemoryChannelLayer"}
+    }
 # Render proxies las solicitudes y Django recibe REMOTE_ADDR como 127.0.0.1.
 # Axes debe usar la IP del cliente que Render reenvía en X-Forwarded-For para
 # que el bloqueo por (usuario, IP) no sea compartido entre visitantes.
