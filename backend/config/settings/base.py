@@ -301,18 +301,21 @@ FRONTEND_BASE_URL = os.getenv(
 # Vercel preview deployment currently used for this project. Keep this exact
 # host scoped; preview deployment URLs can change and must then be updated.
 VERCEL_PREVIEW_ORIGIN = "https://heroes-del-corazon-pabon-58i8y4oqa.vercel.app"
+RENDER_DOCKER_FRONTEND_ORIGIN = "https://heroes-del-corazon-web-docker.onrender.com"
 
 # CORS / CSRF CONFIG. Always allow the configured frontend's exact origin.
 CORS_ALLOWED_ORIGINS = list(dict.fromkeys([
     *env("CORS_ALLOWED_ORIGINS"),
     FRONTEND_BASE_URL,
     VERCEL_PREVIEW_ORIGIN,
+    RENDER_DOCKER_FRONTEND_ORIGIN,
 ]))
 CSRF_TRUSTED_ORIGINS = list(
     dict.fromkeys([
         *(env("CSRF_TRUSTED_ORIGINS") or env("CORS_ALLOWED_ORIGINS")),
         FRONTEND_BASE_URL,
         VERCEL_PREVIEW_ORIGIN,
+        RENDER_DOCKER_FRONTEND_ORIGIN,
     ])
 )
 # Credenciales (cookies httpOnly) exigen un origen concreto, nunca '*'.

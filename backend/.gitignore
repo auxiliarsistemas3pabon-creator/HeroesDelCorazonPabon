@@ -20,6 +20,7 @@ ENV/
 biometricapi_env/
 
 heroes_corazon.sql
+/database-backup/
 
 #data
 data/

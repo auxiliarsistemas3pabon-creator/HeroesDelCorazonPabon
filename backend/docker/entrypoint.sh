@@ -9,6 +9,11 @@ if [ "${DATABASE_ENGINE:-postgresql}" = "mssql" ]; then
     fi
     DB_HOST="${SQLSERVER_HOST:-localhost}"
     DB_PORT="${SQLSERVER_PORT:-1433}"
+elif [ -n "${DATABASE_URL:-}" ]; then
+    # Render supplies DATABASE_URL for production. Prefer its actual host over
+    # a stale Docker-only POSTGRES_HOST=db value from local configuration.
+    DB_HOST="$(python -c "from urllib.parse import urlparse; import os; print(urlparse(os.environ['DATABASE_URL']).hostname or '')")"
+    DB_PORT="$(python -c "from urllib.parse import urlparse; import os; print(urlparse(os.environ['DATABASE_URL']).port or 5432)")"
 else
     DB_HOST="${POSTGRES_HOST:-}"
     DB_PORT="${POSTGRES_PORT:-5432}"

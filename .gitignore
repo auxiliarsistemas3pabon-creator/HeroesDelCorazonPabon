@@ -1,5 +1,6 @@
 .vscode/
 back/
+/.tools/
 
 # Local environment variables and secrets.
 .env
