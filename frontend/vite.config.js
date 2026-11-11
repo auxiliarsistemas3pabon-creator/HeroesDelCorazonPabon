@@ -7,11 +7,14 @@ import { defineConfig, loadEnv } from 'vite'
 export default defineConfig(({ mode }) => {
   // VITE_API_URL (en .env) = origen del backend, sin /api/v1 (ej. http://localhost:8001).
   const env = loadEnv(mode, process.cwd(), '')
+  const jsxTransform = mode === 'test'
+    ? { esbuild: { jsx: 'automatic' } }
+    : { oxc: { jsx: { runtime: 'automatic' } } }
 
   return {
     plugins: [react(), tailwindcss()],
-    // Mantener el mismo transform JSX automático de React en Vitest y en el build.
-    esbuild: { jsx: 'automatic' },
+    // Vitest usa esbuild para JSX y el build de Vite 8 usa Oxc.
+    ...jsxTransform,
     server: {
       // API y WebSocket usan el mismo origen del navegador; Vite reenvía ambos al backend.
       proxy: {
