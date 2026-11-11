@@ -1,25 +1,14 @@
 services:
-  # Keep the current static frontend available while its Docker replacement
-  # is built and checked against the existing PostgreSQL database.
   - type: web
     name: HeroesDelCorazon-pabon-1
-    runtime: static
-    rootDir: frontend
-    buildCommand: npm ci && npm run build
-    staticPublishPath: dist
-    routes:
-      # Same-origin proxy so the browser keeps Django's HttpOnly auth cookies.
-      - type: rewrite
-        source: /api/*
-        destination: https://heroesdelcorazon-pabon.onrender.com/api/*
-      # React Router serves client-side routes from the SPA entry point.
-      - type: rewrite
-        source: /*
-        destination: /index.html
-    headers:
-      - path: /api/*
-        name: Cache-Control
-        value: private, no-store, max-age=0
+    runtime: docker
+    plan: free
+    dockerContext: ./frontend
+    dockerfilePath: ./frontend/Dockerfile
+    healthCheckPath: /
+    envVars:
+      - key: API_UPSTREAM
+        value: https://heroesdelcorazon-pabon.onrender.com
 
   - type: web
     name: HeroesDelCorazon-pabon
@@ -42,19 +31,8 @@ services:
           name: postgres-pabon
           property: connectionString
       - key: FRONTEND_BASE_URL
-        value: https://heroes-del-corazon-web-docker.onrender.com
+        value: https://heroesdelcorazon-pabon-1.onrender.com
       - key: CORS_ALLOWED_ORIGINS
-        value: https://heroes-del-corazon-web-docker.onrender.com,https://heroesdelcorazon-pabon-1.onrender.com
+        value: https://heroesdelcorazon-pabon-1.onrender.com
       - key: CSRF_TRUSTED_ORIGINS
-        value: https://heroes-del-corazon-web-docker.onrender.com,https://heroesdelcorazon-pabon-1.onrender.com
-
-  - type: web
-    name: heroes-del-corazon-web-docker
-    runtime: docker
-    plan: free
-    dockerContext: ./frontend
-    dockerfilePath: ./frontend/Dockerfile
-    healthCheckPath: /
-    envVars:
-      - key: API_UPSTREAM
-        value: https://heroesdelcorazon-pabon.onrender.com
+        value: https://heroesdelcorazon-pabon-1.onrender.com
