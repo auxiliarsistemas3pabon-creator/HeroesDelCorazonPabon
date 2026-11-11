@@ -99,10 +99,24 @@ export function AuthProvider({ children }) {
         authenticatedUser = await api('/auth/me/')
       } catch (error) {
         if (error.status !== 401) throw error
-        // A fresh access cookie can take a moment to become available through the proxy;
-        // use the refresh cookie once, then verify the actual session before entering.
-        await api('/auth/refresh/', { method: 'POST' })
+      }
+      if (!authenticatedUser) {
+        // /auth/me/ uses 200 + null for an absent/invalid access cookie.
+        // Try the refresh cookie once before reporting a session transport issue.
+        try {
+          await api('/auth/refresh/', { method: 'POST' })
+        } catch (cause) {
+          throw Object.assign(new Error('El backend aceptó el login, pero no se pudo establecer la sesión.'), {
+            code: 'SESSION_NOT_ESTABLISHED',
+            cause,
+          })
+        }
         authenticatedUser = await api('/auth/me/')
+      }
+      if (!authenticatedUser) {
+        throw Object.assign(new Error('El backend aceptó el login, pero no se pudo establecer la sesión.'), {
+          code: 'SESSION_NOT_ESTABLISHED',
+        })
       }
       if (operation === authOperation.current) setUser(authenticatedUser)
       return authenticatedUser

@@ -28,11 +28,15 @@ async function ensureCsrfToken() {
 // Convierte un error lanzado por `api` en texto para el usuario. Soporta el formato de DRF:
 // { detail: '...' } o { campo: ['mensaje'] } (se toma el primer mensaje).
 export function errorMessage(error, fallback = 'Ocurrió un error') {
+  if (error?.code === 'SESSION_NOT_ESTABLISHED') {
+    return 'El backend respondió al login, pero Vercel no conservó la sesión. Verifica que el último despliegue incluya el proxy de /api.'
+  }
   // 502/503/504: el backend se está reiniciando o no responde; fetch sin status: no hay conexión.
   if (error?.status >= 502) return 'El servidor no está disponible en este momento. Intenta de nuevo en unos segundos.'
   if (error instanceof TypeError) return 'No hay conexión con el servidor. Revisa tu red e intenta de nuevo.'
   const data = error?.data
   if (error?.status === 404) return 'El servidor no encontró esta ruta de la API. Verifica el despliegue y la ruta solicitada.'
+  if (error?.status === 401) return 'Render rechazó el usuario o la contraseña. Verifica las credenciales de esta cuenta.'
   if (!data) return fallback
   if (typeof data.detail === 'string') return data.detail
   const first = Object.values(data).flat()[0]
