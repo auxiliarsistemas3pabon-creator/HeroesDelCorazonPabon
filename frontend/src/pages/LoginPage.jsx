@@ -5,6 +5,7 @@ import { Button } from '../components/ui/Button'
 import { ALERT_ERROR, FIELD, LABEL } from '../components/ui/styles'
 import { useAuth } from '../context/AuthContext'
 import { errorMessage } from '../lib/api'
+import { mediaUrl } from '../lib/media'
 
 // Textos de marketing del panel izquierdo. Mantenerlos alineados con las reglas reales (escala, cierre).
 const FEATURES = [
@@ -46,8 +47,8 @@ export function LoginPage() {
     <div className="grid min-h-dvh w-full grid-cols-[minmax(0,1fr)_minmax(0,1fr)]">
       <aside className="relative flex min-h-dvh min-w-0 flex-col bg-gradient-to-br from-[#c02645] via-[#a71932] to-[#70182b] px-6 py-5 text-white">
         <div className="inline-flex w-fit items-center gap-2 rounded-lg bg-white px-2 py-1.5 shadow-md">
-          <img className="h-8 w-auto" src="/icons/logo-clinica.png" alt="Clínica Pabón" />
-          <img className="h-8 w-auto" src="/icons/logo-centro-pabon.png" alt="Centro de Cuidados Cardioneurovasculares Pabón" />
+          <img className="h-8 w-auto" src={mediaUrl('logo-clinica.png')} alt="Clínica Pabón" />
+          <img className="h-8 w-auto" src={mediaUrl('logo-centro-pabon.png')} alt="Centro de Cuidados Cardioneurovasculares Pabón" />
         </div>
         <div className="relative z-10 mt-5 max-w-lg">
           <h2 className="text-[11px] font-medium uppercase tracking-[0.16em] text-white/80">Evaluación de desempeño</h2>
@@ -66,7 +67,7 @@ export function LoginPage() {
         </div>
         <img
           className="pointer-events-none absolute bottom-0 right-0 z-0 h-52 w-auto max-w-[46%] object-contain object-bottom drop-shadow-2xl"
-          src="/images/paboncito.png"
+          src={mediaUrl('paboncito.png')}
           alt=""
           aria-hidden
         />
