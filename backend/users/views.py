@@ -216,7 +216,10 @@ class StaffCandidatesView(AuditLogMixin, APIView):
 
     def get(self, request):
         staff = (
-            User.objects.filter(role=User.Role.PERSONAL, is_active=True)
+            User.objects.filter(
+                role__in=[User.Role.COLLABORATOR, User.Role.PERSONAL],
+                is_active=True,
+            )
             .exclude(area="")
             .order_by("first_name", "last_name", "id")
             .values("id", "first_name", "last_name", "area")
