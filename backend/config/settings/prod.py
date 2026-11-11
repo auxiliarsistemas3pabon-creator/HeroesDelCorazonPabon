@@ -29,6 +29,10 @@ SECURE_PROXY_SSL_HEADER = ("HTTP_X_FORWARDED_PROTO", "https")
 SESSION_COOKIE_SECURE = True
 CSRF_COOKIE_SECURE = True
 AUTH_COOKIE_SECURE = True
+# Render proxies las solicitudes y Django recibe REMOTE_ADDR como 127.0.0.1.
+# Axes debe usar la IP del cliente que Render reenvía en X-Forwarded-For para
+# que el bloqueo por (usuario, IP) no sea compartido entre visitantes.
+AXES_IPWARE_META_PRECEDENCE_ORDER = ("HTTP_X_FORWARDED_FOR", "REMOTE_ADDR")
 SECURE_HSTS_SECONDS = 60 * 60 * 24 * 30  # 30 días
 SECURE_HSTS_INCLUDE_SUBDOMAINS = True
 SECURE_HSTS_PRELOAD = True
