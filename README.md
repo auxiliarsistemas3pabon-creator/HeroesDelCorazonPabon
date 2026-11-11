@@ -47,7 +47,7 @@ El backend corre dentro de Docker en el flujo recomendado; no es necesario insta
 
 4. Abrir `http://localhost:5173`. La administración Django está en `http://localhost:8001/admin/`.
 
-Si los puertos están ocupados, establecer `API_PORT` y/o `MAILPIT_UI_PORT` en `backend/.env`. El frontend usa `VITE_API_URL` para el destino del proxy; su valor de ejemplo coincide con el puerto local estándar, `http://localhost:8001`.
+Si los puertos están ocupados, establecer `API_PORT` y/o `MAILPIT_UI_PORT` en `backend/.env`. En desarrollo, `VITE_API_URL=http://localhost:8001` apunta al puerto local que Docker publica para Django. En producción, el cliente usa `/api/v1` en el mismo origen y Render reenvía esa ruta al backend.
 
 Para crear una cuenta administrativa local:
 
@@ -57,7 +57,7 @@ docker compose exec backend python manage.py createsuperuser
 
 ## Configuración
 
-Docker Compose lee `backend/.env` y Vite lee `frontend/.env` automáticamente. Ambos archivos son locales y están excluidos de Git; cada entorno debe aprovisionarlos por separado. El desarrollo local requiere `DJANGO_SECRET_KEY`, `POSTGRES_DB`, `POSTGRES_USER`, `POSTGRES_PASSWORD`, `CHANNELS_REDIS_URL`, `FRONTEND_BASE_URL`, `CORS_ALLOWED_ORIGINS` y `CSRF_TRUSTED_ORIGINS`. Para correo, configurar `EMAIL_BACKEND`, `EMAIL_HOST`, `EMAIL_PORT`, `EMAIL_USE_TLS`, `EMAIL_HOST_USER`, `EMAIL_HOST_PASSWORD` y `DEFAULT_FROM_EMAIL`; en desarrollo con Mailpit, las credenciales SMTP pueden quedar vacías. Los puertos locales opcionales son `API_PORT`, `DB_PORT` y `MAILPIT_UI_PORT`. Vite requiere `VITE_API_URL`; las variables `VITE_*` se incorporan al código enviado al navegador y nunca deben contener credenciales ni secretos.
+Docker Compose lee `backend/.env` y Vite lee `frontend/.env` automáticamente. Ambos archivos son locales y están excluidos de Git; cada entorno debe aprovisionarlos por separado. El desarrollo local requiere `DJANGO_SECRET_KEY`, `POSTGRES_DB`, `POSTGRES_USER`, `POSTGRES_PASSWORD`, `CHANNELS_REDIS_URL`, `FRONTEND_BASE_URL`, `CORS_ALLOWED_ORIGINS` y `CSRF_TRUSTED_ORIGINS`. Para correo, configurar `EMAIL_BACKEND`, `EMAIL_HOST`, `EMAIL_PORT`, `EMAIL_USE_TLS`, `EMAIL_HOST_USER`, `EMAIL_HOST_PASSWORD` y `DEFAULT_FROM_EMAIL`; en desarrollo con Mailpit, las credenciales SMTP pueden quedar vacías. Los puertos locales opcionales son `API_PORT`, `DB_PORT` y `MAILPIT_UI_PORT`. En desarrollo, `VITE_API_URL` apunta al backend local de Docker; el build de producción no requiere esa variable porque usa el proxy de mismo origen de Render. Las variables `VITE_*` se incorporan al código enviado al navegador y nunca deben contener credenciales ni secretos.
 
 Variables importantes del backend:
 
@@ -72,6 +72,14 @@ Variables importantes del backend:
 - `AUTH_COOKIE_SAMESITE` y `AUTH_COOKIE_SECURE`: configuración de cookies; producción fuerza cookies seguras.
 
 No versionar archivos `.env`, claves, credenciales, copias de bases de datos ni archivos de importación con datos reales. Antes de compartir datos de ejemplo, comprobar que sean sintéticos.
+
+## Despliegue del frontend en Render
+
+El archivo `render.yaml` define el frontend como Static Site en el mismo repositorio. Render ejecuta `npm ci` y el build de Vite, publica `dist/` desde `frontend/`, reenvía `/api/*` al backend existente y sirve `index.html` para las rutas de React Router. Este proxy de mismo origen permite que el navegador guarde y envíe las cookies httpOnly sin depender de cookies de terceros. Las reglas de proxy de Vercel se retiraron; sus archivos conservan únicamente el fallback SPA.
+
+Para crear el sitio, sincroniza el Blueprint `render.yaml` desde el Dashboard de Render y despliega o sincroniza el servicio `HeroesDelCorazon-pabon-1`. Después copia el origen HTTPS asignado al sitio en `FRONTEND_BASE_URL` del servicio backend y verifica que `CSRF_TRUSTED_ORIGINS` incluya ese mismo origen. Render debe volver a desplegar el backend tras guardar esos valores. No reemplaces `DATABASE_URL` ni las variables de autenticación del backend. En producción, `AUTH_COOKIE_SAMESITE` usa `Lax` por defecto; si Render tiene configurado explícitamente `None`, cámbialo a `Lax` para el proxy de mismo origen.
+
+Local mantiene el backend Docker: `frontend/.env` usa `VITE_API_URL=http://localhost:8001` como destino del proxy de Vite. El navegador llama a `/api` en `localhost:5173`, y Vite reenvía la solicitud al contenedor; así las cookies quedan en el mismo origen local.
 
 ## Estructura del backend
 
@@ -303,7 +311,7 @@ Las rutas del menú se configuran en `components/Layout.jsx`; al agregar una pan
 - `context/AuthContext.jsx` mantiene usuario, carga inicial, login y logout.
 - `lib/api.js` es el cliente común: usa `credentials: 'include'`, envía el token CSRF en mutaciones, serializa JSON y renueva una sesión vencida una vez.
 - El backend entrega access y refresh como cookies httpOnly. No guardar tokens de sesión en `localStorage` ni hacer `fetch` directo para endpoints autenticados; usar `api()`.
-- En desarrollo, `vite.config.js` envía `/api` al backend configurado en `VITE_API_URL` (por defecto `http://localhost:8001`). Así frontend y API comparten origen desde el navegador y se simplifica CSRF.
+- En desarrollo y producción, `lib/api.js` llama a `/api/v1` en el mismo origen del frontend. Vite reenvía `/api` al backend Docker local usando `VITE_API_URL`; Render reescribe `/api/*` hacia Django en producción. Así las cookies de autenticación son first-party.
 - `lib/useEvaluationForms.js` centraliza la carga de formularios históricos para vistas que deben mostrar categorías o preguntas ya desactivadas.
 
 ### Convenciones para cambios
@@ -316,7 +324,7 @@ Las rutas del menú se configuran en `components/Layout.jsx`; al agregar una pan
 
 ### Compilación y variables
 
-`frontend/.env` define `VITE_API_URL`, el origen del backend usado por el proxy de Vite. Las variables `VITE_*` se incorporan al bundle y son visibles en el navegador; nunca poner secretos en ellas. En producción, el servidor web debe entregar el directorio `dist/` y reenviar `/api/` al servicio Django.
+`frontend/.env` define `VITE_API_URL=http://localhost:8001` para Docker local. En producción no se establece esta variable; el cliente usa `/api/v1` relativo y Render lo reescribe hacia Django.
 
 Los scripts disponibles están en `frontend/package.json`:
 
@@ -357,7 +365,7 @@ Antes de actualizar un ambiente con datos, obtener y verificar una copia de segu
 
 En Render, configurar `DATABASE_URL` con la URL interna de PostgreSQL asociada al servicio. PostgreSQL es el motor predeterminado y Django usa esa URL antes de las variables `POSTGRES_*`; así no intenta conectar a `localhost:5432`. Mantener el Web Service y PostgreSQL en la misma región para usar la URL interna. Render documenta este flujo en [conexión a PostgreSQL](https://render.com/docs/postgresql-creating-connecting).
 
-Para conectar el frontend Vercel con el backend Render, definir en Vercel `VITE_API_URL` con el origen del Web Service Render, sin `/api/v1` (por ejemplo, `https://mi-api.onrender.com`) y volver a desplegar. La API y el WebSocket usan esa misma variable; el socket conecta directamente a `wss://<backend-render>/ws/events/`, ya que Vercel no proxea `/ws/` al backend. En Render, incluir el origen exacto de Vercel en `CORS_ALLOWED_ORIGINS` y `CSRF_TRUSTED_ORIGINS`, y definir `AUTH_COOKIE_SAMESITE=None` para que el navegador envíe las cookies cross-site por HTTPS. Django entrega el token CSRF en `/api/v1/auth/csrf/`; el cliente del frontend lo solicita antes de cada método que modifica datos. Si el navegador bloquea cookies de terceros, usar dominios propios del mismo sitio para frontend y API. El backend incluye el origen exacto del preview `heroes-del-corazon-pabon-58i8y4oqa.vercel.app`; si Vercel genera otro dominio de preview, agregar ese nuevo origen en ambas variables de Render y desplegar de nuevo.
+En producción, Render sirve el frontend y reescribe `/api/*` al backend `https://heroesdelcorazon-pabon.onrender.com/api/*`. No configures el origen público del backend en `VITE_API_URL` para producción: el cliente usa rutas relativas para que el navegador conserve las cookies. En el backend Render, configura `FRONTEND_BASE_URL` y `CSRF_TRUSTED_ORIGINS` con el origen HTTPS que Render asigne al frontend; después vuelve a desplegar el backend. La conexión directa entre dominios distintos puede hacer que el navegador bloquee las cookies de sesión.
 
 El puerto del backend se publica solo en `127.0.0.1` del host para que un proxy TLS local pueda acceder a Gunicorn sin exponerlo directamente a Internet. Si el proxy corre en otro contenedor o servidor, usar una red privada y no publicar el puerto del backend en una interfaz pública; el proxy debe sobrescribir `X-Forwarded-Proto`.
 

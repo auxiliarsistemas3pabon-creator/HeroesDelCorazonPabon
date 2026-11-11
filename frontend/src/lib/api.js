@@ -1,11 +1,11 @@
 // Cliente de la API. Las cookies httpOnly viajan solas (credentials) y las
 // peticiones que modifican datos llevan el token CSRF de la cookie `csrftoken`.
-// En producción la API usa el mismo origen del frontend (Vercel la reenvía a Render).
+// En producción la API usa el mismo origen del frontend (Render la reenvía al backend).
 // Así las cookies httpOnly de sesión son first-party y no dependen de cookies de terceros.
-const configuredApiOrigin = (import.meta.env.VITE_API_URL || '')
-  .replace(/\/api\/v1\/?$/, '').replace(/\/$/, '')
-const API_ORIGIN = import.meta.env.PROD ? '' : configuredApiOrigin
-const BASE = `${API_ORIGIN}/api/v1`
+// Always call the API through the frontend origin. In local development Vite
+// proxies /api to the Docker backend configured by VITE_API_URL; Render applies
+// the equivalent /api rewrite in production. This keeps auth cookies first-party.
+const BASE = '/api/v1'
 let csrfTokenValue = ''
 
 // Django exige el token CSRF en cabecera para métodos no seguros; se lee de la cookie que emite el backend.
@@ -29,7 +29,9 @@ async function ensureCsrfToken() {
 // { detail: '...' } o { campo: ['mensaje'] } (se toma el primer mensaje).
 export function errorMessage(error, fallback = 'Ocurrió un error') {
   if (error?.code === 'SESSION_NOT_ESTABLISHED') {
-    return 'El backend respondió al login, pero Vercel no conservó la sesión. Verifica que el último despliegue incluya el proxy de /api.'
+    return import.meta.env.DEV
+      ? 'El backend aceptó el inicio de sesión, pero no se conservó la cookie. Comprueba que Docker y el proxy local estén activos.'
+      : 'El backend aceptó el inicio de sesión, pero no se conservó la cookie. Comprueba el proxy /api del frontend de Render.'
   }
   // 502/503/504: el backend se está reiniciando o no responde; fetch sin status: no hay conexión.
   if (error?.status >= 502) return 'El servidor no está disponible en este momento. Intenta de nuevo en unos segundos.'

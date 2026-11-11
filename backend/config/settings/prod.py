@@ -30,9 +30,9 @@ SECURE_PROXY_SSL_HEADER = ("HTTP_X_FORWARDED_PROTO", "https")
 SESSION_COOKIE_SECURE = True
 CSRF_COOKIE_SECURE = True
 AUTH_COOKIE_SECURE = True
-# Vercel and Render use different sites, so browsers require cross-site auth
-# cookies. Secure is already forced above for this production settings module.
-AUTH_COOKIE_SAMESITE = os.getenv("AUTH_COOKIE_SAMESITE", "None")
+# El frontend de Render reenvía /api/v1 por el mismo origen, así que Lax basta
+# y evita depender de cookies de terceros. Secure se fuerza arriba en producción.
+AUTH_COOKIE_SAMESITE = os.getenv("AUTH_COOKIE_SAMESITE", "Lax")
 CSRF_COOKIE_SAMESITE = AUTH_COOKIE_SAMESITE
 SESSION_COOKIE_SAMESITE = AUTH_COOKIE_SAMESITE
 # No asumir el hostname `redis` de Docker en Render. Si hay un Redis/Key Value
