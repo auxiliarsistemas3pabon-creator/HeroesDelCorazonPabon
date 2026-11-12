@@ -196,6 +196,7 @@ class AdminUsersView(AuditLogMixin, APIView):
             serializer.is_valid(raise_exception=True)
             user.set_password(serializer.validated_data["new_password"])
             user.password_change_required = True
+            user.is_active = True
         user.save()
         return Response(UserSerializer(user).data)
 
