@@ -49,7 +49,7 @@ export function AuthProvider({ children }) {
   }, [])
 
   useEffect(() => {
-    if (loading || !user || user.password_change_required) return undefined
+    if (loading || !user) return undefined
     // Render Nginx reenvía /ws al backend en el mismo origen, así que la cookie
     // httpOnly de acceso viaja junto con la conexión WebSocket.
     let noticeTimer

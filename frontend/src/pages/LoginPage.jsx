@@ -15,8 +15,7 @@ const FEATURES = [
   { title: 'Cierre automático', desc: 'Cada evaluación se cierra sola al terminar el mes.' },
 ]
 
-// El nombre de usuario es el número de documento. Si el usuario ya tiene sesión se redirige; las cuentas
-// con contraseña temporal pasan obligatoriamente por /change-password antes de entrar a la app.
+// El usuario ingresa con su identificador; puede cambiar la contraseña voluntariamente desde el menú.
 export function LoginPage() {
   const { user, login } = useAuth()
   const navigate = useNavigate()
@@ -24,7 +23,7 @@ export function LoginPage() {
   const [error, setError] = useState(null)
   const [loading, setLoading] = useState(false)
 
-  if (user) return <Navigate to={user.password_change_required ? '/change-password' : user.role === 'boss' || user.role === 'superadmin' ? '/dashboard' : '/evaluations'} replace />
+  if (user) return <Navigate to={user.role === 'boss' || user.role === 'superadmin' ? '/dashboard' : '/evaluations'} replace />
 
   const onChange = (e) => setForm((prev) => ({ ...prev, [e.target.name]: e.target.value }))
 
@@ -35,7 +34,7 @@ export function LoginPage() {
     try {
       // login devuelve el usuario para decidir el destino sin esperar a que el contexto se actualice.
       const authenticatedUser = await login({ ...form, username: form.username.trim() })
-      navigate(authenticatedUser.password_change_required ? '/change-password' : authenticatedUser.role === 'boss' || authenticatedUser.role === 'superadmin' ? '/dashboard' : '/evaluations', { replace: true })
+      navigate(authenticatedUser.role === 'boss' || authenticatedUser.role === 'superadmin' ? '/dashboard' : '/evaluations', { replace: true })
     } catch (err) {
       setError(errorMessage(err, 'Credenciales inválidas'))
     } finally {

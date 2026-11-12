@@ -6,8 +6,7 @@ import { ALERT_ERROR, LABEL, PAGE_SUBTITLE, PAGE_TITLE } from '../components/ui/
 import { useAuth } from '../context/AuthContext'
 import { api, errorMessage } from '../lib/api'
 
-// Cambio obligatorio de la contraseña temporal (primer ingreso o tras restablecimiento por el administrador).
-// Está fuera de <Layout>, así que valida la sesión por sí misma. Solo es accesible si `password_change_required`.
+// Cambio voluntario de contraseña, disponible para toda cuenta autenticada.
 export function PasswordChangePage() {
   const { user, loading, refreshUser } = useAuth()
   const navigate = useNavigate()
@@ -18,7 +17,6 @@ export function PasswordChangePage() {
   // Esperar a /auth/me/ antes de redirigir; si no, un usuario con sesión sería enviado a /login por error.
   if (loading) return null
   if (!user) return <Navigate to="/login" replace />
-  if (!user.password_change_required) return <Navigate to="/" replace />
 
   function onChange(event) {
     setForm((current) => ({ ...current, [event.target.name]: event.target.value }))
@@ -39,7 +37,7 @@ export function PasswordChangePage() {
         method: 'POST',
         body: { current_password: form.current_password, new_password: form.new_password },
       })
-      // Se recarga el usuario para limpiar `password_change_required`; si no, el guard rebotaría de vuelta aquí.
+      // Se actualiza el perfil tras guardar el cambio de contraseña.
       await refreshUser()
       navigate('/', { replace: true })
     } catch (e) {
@@ -52,9 +50,9 @@ export function PasswordChangePage() {
   return (
     <main className="flex min-h-dvh items-center justify-center bg-app px-4 py-8">
       <section className="w-full max-w-md rounded-xl border border-app bg-surface p-6 shadow-sm">
-        <h1 className={PAGE_TITLE}>Cambia tu contraseña temporal</h1>
+        <h1 className={PAGE_TITLE}>Cambiar contraseña</h1>
         <p className={PAGE_SUBTITLE}>
-          Para continuar, reemplaza la contraseña temporal por una personal que no compartas.
+          Ingresa tu contraseña actual y elige una nueva. Este cambio es voluntario.
         </p>
         <form onSubmit={onSubmit} className="mt-6 flex flex-col gap-4">
           {error && <div role="alert" className={ALERT_ERROR}>{error}</div>}

@@ -36,7 +36,7 @@ export function UsersAdminPage() {
       setUsers((current) => current.map((user) => user.id === id ? updated : user))
       if (data.new_password) setPasswords((current) => ({ ...current, [id]: '' }))
       setNotice(data.new_password
-        ? 'Contraseña restablecida. El usuario deberá cambiarla al ingresar; el estado de la cuenta no se modificó.'
+        ? 'Contraseña restablecida. El usuario puede iniciar sesión con la nueva clave; el estado de la cuenta no se modificó.'
         : `Cuenta ${updated.is_active ? 'habilitada' : 'inhabilitada'}.`)
     } catch (e) { setError(errorMessage(e)) }
   }

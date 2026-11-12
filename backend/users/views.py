@@ -205,7 +205,7 @@ class AdminUsersView(AuditLogMixin, APIView):
             serializer = PasswordChangeSerializer(data={"new_password": request.data["new_password"]}, context={"target_user": user})
             serializer.is_valid(raise_exception=True)
             user.set_password(serializer.validated_data["new_password"])
-            user.password_change_required = True
+            user.password_change_required = False
         if "is_active" in request.data:
             user.is_active = active
         user.save()

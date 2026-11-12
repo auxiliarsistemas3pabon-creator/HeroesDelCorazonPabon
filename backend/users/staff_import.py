@@ -69,7 +69,7 @@ def import_staff(file) -> dict:
     """Crea colaboradores desde el Excel; devuelve resumen con creados, omitidos, errores y credenciales.
 
         Idempotente por documento: los usernames existentes se omiten, no se actualizan. Cada usuario
-        nuevo recibe una clave temporal aleatoria con password_change_required=True; esas claves solo
+        nuevo recibe una clave temporal aleatoria con password_change_required=False; el cambio de clave es opcional. Las claves solo
         viajan en la respuesta (initial_credentials) y no se pueden recuperar despues. Los errores
         por fila no detienen la importacion; la vista envuelve todo en una transaccion.
         """
@@ -104,7 +104,7 @@ def import_staff(file) -> dict:
             role=User.Role.COLLABORATOR,
             area=values["area"],
             position=values["position"],
-            password_change_required=True,
+            password_change_required=False,
         )
         initial_credentials.append({"username": document, "password": temporary_password})
         existing.add(document)
