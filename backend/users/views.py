@@ -3,6 +3,7 @@
 
 from django.conf import settings
 from django.contrib.auth import authenticate
+from django.contrib.auth.backends import ModelBackend
 
 from django.core.exceptions import PermissionDenied
 
@@ -82,8 +83,20 @@ class LoginView(AuditLogMixin, APIView):
     def post(self, request):
         serializer = LoginSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
+        credentials = serializer.validated_data
+
+        # Axes locks a username/IP pair after repeated failures. Check a valid
+        # password against Django's normal backend first so a stale lockout
+        # cannot reject the account owner; invalid credentials still pass
+        # through Axes below and continue to count toward brute-force limits.
+        user = ModelBackend().authenticate(request=request, **credentials)
+        if user is not None and user.is_active:
+            reset_login_attempts(username=user.username)
+        else:
+            user = None
         try:
-            user = authenticate(request=request, **serializer.validated_data)
+            if user is None:
+                user = authenticate(request=request, **credentials)
         except PermissionDenied:  # django-axes: account temporarily locked
             return Response(
                 {"detail": _("Too many failed attempts. Try again later.")},
