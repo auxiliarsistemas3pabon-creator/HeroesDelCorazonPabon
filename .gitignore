@@ -7,3 +7,4 @@ back/
 .env.*
 **/.env
 **/.env.*
+.codex 
