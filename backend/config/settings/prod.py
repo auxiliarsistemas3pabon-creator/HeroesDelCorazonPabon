@@ -6,6 +6,7 @@ exclusivamente de variables de entorno.
 """
 from django.core.exceptions import ImproperlyConfigured
 import os
+from urllib.parse import urlparse
 
 from .base import *  # noqa: F401,F403
 
@@ -39,6 +40,12 @@ SESSION_COOKIE_SAMESITE = AUTH_COOKIE_SAMESITE
 # enlazado, Render entrega REDIS_URL; sin él, Channels usa memoria y no bloquea
 # las solicitudes HTTP ni genera errores de DNS al cerrar conexiones WebSocket.
 _render_redis_url = os.getenv("REDIS_URL")
+if _render_redis_url and urlparse(_render_redis_url).hostname in {
+    "redis",
+    "localhost",
+    "127.0.0.1",
+}:
+    _render_redis_url = None
 if _render_redis_url:
     CHANNEL_LAYERS = {
         "default": {

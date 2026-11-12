@@ -204,10 +204,19 @@ REST_FRAMEWORK = {
 ASGI_APPLICATION = "config.asgi.application"
 # Render exposes REDIS_URL only when a Key Value service is linked. Ignore
 # Docker-only CHANNELS_REDIS_URL there; a missing Redis service uses memory.
-_render_environment = os.getenv("RENDER") == "true" or bool(os.getenv("RENDER_SERVICE_ID"))
+_render_environment = (
+    os.getenv("RENDER") == "true"
+    or bool(os.getenv("RENDER_SERVICE_ID"))
+    or os.getenv("DJANGO_SETTINGS_MODULE", "").endswith(".prod")
+)
 _channels_redis_url = os.getenv("REDIS_URL") or (
     None if _render_environment else os.getenv("CHANNELS_REDIS_URL", "redis://localhost:6379/3")
 )
+if _render_environment and _channels_redis_url:
+    from urllib.parse import urlparse
+
+    if urlparse(_channels_redis_url).hostname in {"redis", "localhost", "127.0.0.1"}:
+        _channels_redis_url = None
 if _channels_redis_url:
     CHANNEL_LAYERS = {
         "default": {

@@ -1,5 +1,5 @@
 
-import { lazy, Suspense } from 'react'
+import { Component, lazy, Suspense } from 'react'
 import { BrowserRouter, Navigate, Route, Routes } from 'react-router-dom'
 import { Layout } from './components/Layout'
 import { AuthProvider, useAuth } from './context/AuthContext'
@@ -15,6 +15,25 @@ const FormProgramPage = lazy(() => import('./pages/FormProgramPage').then((modul
 const ResultsPage = lazy(() => import('./pages/ResultsPage').then((module) => ({ default: module.ResultsPage })))
 const StaffImportPage = lazy(() => import('./pages/StaffImportPage').then((module) => ({ default: module.StaffImportPage })))
 const UsersAdminPage = lazy(() => import('./pages/UsersAdminPage').then((module) => ({ default: module.UsersAdminPage })))
+
+class PageLoadBoundary extends Component {
+  state = { failed: false }
+
+  static getDerivedStateFromError() {
+    return { failed: true }
+  }
+
+  render() {
+    if (this.state.failed) {
+      return <main className="m-auto max-w-lg p-6 text-center text-app">
+        <h1 className="text-lg font-semibold">No se pudo cargar esta página</h1>
+        <p className="mt-2 text-sm text-app-muted">Comprueba tu conexión e inténtalo de nuevo.</p>
+        <button type="button" className="mt-4 rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-white" onClick={() => window.location.reload()}>Recargar</button>
+      </main>
+    }
+    return this.props.children
+  }
+}
 
 // Destino de "/": roles `boss`/`superadmin` -> dashboard; los demás -> evaluar.
 // El dashboard es solo del jefe; el colaborador entra directo a evaluar.
@@ -41,6 +60,7 @@ function App() {
       <AuthProvider>
         {/* AuthProvider dentro del Router para poder usar navegación; consulta /auth/me/ al iniciar */}
         <Suspense fallback={<main className="p-6 text-sm text-app-muted" role="status">Cargando…</main>}>
+        <PageLoadBoundary>
         <Routes>
           <Route path="/login" element={<LoginPage />} />
           <Route path="/" element={<LoginPage />} />
@@ -58,6 +78,7 @@ function App() {
             <Route path="*" element={<Navigate to="/dashboard" replace />} />
           </Route>
         </Routes>
+        </PageLoadBoundary>
         </Suspense>
       </AuthProvider>
     </BrowserRouter>
