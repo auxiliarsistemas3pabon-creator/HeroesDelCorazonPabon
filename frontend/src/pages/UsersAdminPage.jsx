@@ -42,6 +42,15 @@ export function UsersAdminPage() {
     } catch (e) { setError(errorMessage(e)) }
   }
 
+  async function activate(id) {
+    setError(''); setNotice('')
+    try {
+      const updated = await api(`/users/admin/${id}/activate/`, { method: 'POST' })
+      setUsers((current) => current.map((user) => user.id === id ? updated : user))
+      setNotice('Cuenta habilitada. El usuario puede volver a iniciar sesión.')
+    } catch (e) { setError(errorMessage(e)) }
+  }
+
   async function savePassword(event) {
     event.preventDefault()
     if (passwordForm.new_password !== passwordForm.confirmation) { setError('Las contraseñas no coinciden.'); return }
@@ -73,7 +82,9 @@ export function UsersAdminPage() {
         <tbody>{pageUsers.map((user) => <tr key={user.id} className="border-t border-app">
           <td className="px-4 py-3 font-medium">{user.username}</td><td className="px-4 py-3">{user.first_name} {user.last_name}</td><td className="px-4 py-3">{user.area || '—'}</td>
           <td className="px-4 py-3"><select aria-label={`Rol de ${user.username}`} className="rounded-md border border-app bg-surface px-2 py-2" value={user.role} onChange={(e) => update(user.id, { role: e.target.value })}>{ROLES.map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select></td>
-          <td className="px-4 py-3"><Button size="sm" variant="danger" disabled={!user.is_active} onClick={() => update(user.id, { is_active: false })}>{user.is_active ? 'Inhabilitar' : 'Inhabilitado'}</Button></td>
+          <td className="px-4 py-3">{user.is_active
+            ? <Button size="sm" variant="danger" onClick={() => update(user.id, { is_active: false })}>Inhabilitar</Button>
+            : <Button size="sm" variant="secondary" onClick={() => activate(user.id)}>Habilitar</Button>}</td>
           <td className="px-4 py-3"><Button size="sm" variant="secondary" onClick={() => { setError(''); setPasswordUser(user); setPasswordForm({ new_password: '', confirmation: '' }) }}>Cambiar contraseña</Button></td>
         </tr>)}</tbody></table>
       {!filtered.length && <p className="p-6 text-center text-app-muted">No hay usuarios que coincidan.</p>}
