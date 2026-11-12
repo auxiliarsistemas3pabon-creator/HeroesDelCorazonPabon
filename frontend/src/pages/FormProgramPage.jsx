@@ -20,7 +20,7 @@ export function FormProgramPage() {
 
   // Evaluaciones existentes + personal candidato (para elegir personas a evaluar al programar).
   useEffect(() => {
-    Promise.all([api(EVALUATIONS), api('/users/staff-candidates/')])
+    Promise.all([api(`${EVALUATIONS}?created_by=me`), api('/users/staff-candidates/')])
       .then(([list, candidates]) => {
         setEvaluations(list)
         setStaff(candidates)
@@ -29,7 +29,7 @@ export function FormProgramPage() {
   }, [])
 
   // `selected` es string ('' = ninguna) porque lo maneja AutocompleteSelect; por eso se compara con String(id).
-  const chosen = evaluations?.find((evaluation) => String(evaluation.closes_on) === selected) ?? null
+  const chosen = evaluations?.find((evaluation) => String(evaluation.id) === selected) ?? null
 
   // Al programar se crea una evaluación NUEVA (id distinto), así que se agrega a la lista en vez de reemplazar.
   function handleSaved(updated) {
@@ -37,9 +37,7 @@ export function FormProgramPage() {
     setNotice(`Nueva evaluación programada: «${updated.name}».`)
     setSelected('')
     setFormVersion((version) => version + 1)
-    setEvaluations((current) => current.some((evaluation) => evaluation.closes_on === updated.closes_on)
-      ? current.map((evaluation) => evaluation.closes_on === updated.closes_on ? updated : evaluation)
-      : [...current, updated])
+    setEvaluations((current) => [...current, updated])
   }
 
   return (
@@ -64,7 +62,7 @@ export function FormProgramPage() {
               options={[
                 { value: '', label: 'Selecciona una evaluación' },
                 ...evaluations.map((evaluation) => ({
-                  value: String(evaluation.closes_on),
+                  value: String(evaluation.id),
                   label: `${evaluation.name} (Cierra ${evaluation.closes_on})`,
                 })),
               ]}
