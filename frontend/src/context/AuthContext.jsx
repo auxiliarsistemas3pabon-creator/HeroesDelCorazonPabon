@@ -50,14 +50,8 @@ export function AuthProvider({ children }) {
 
   useEffect(() => {
     if (loading || !user || user.password_change_required) return undefined
-    // En producción la API se proxea por Render para mantener sus cookies en
-    // el origen del frontend; el socket directo de Render no recibe esas cookies.
-    // No abrir una conexión que siempre será rechazada (403) y no afecta las
-    // funciones normales de la aplicación.
-    if (import.meta.env.PROD) {
-      setRealtimeStatus('unavailable')
-      return undefined
-    }
+    // Render Nginx reenvía /ws al backend en el mismo origen, así que la cookie
+    // httpOnly de acceso viaja junto con la conexión WebSocket.
     let noticeTimer
     const disconnect = connectRealtime({
       onStatus: setRealtimeStatus,
@@ -93,13 +87,9 @@ export function AuthProvider({ children }) {
     setLoading(true)
     setUser(null)
     try {
-      await api('/auth/login/', { method: 'POST', body: credentials })
-      let authenticatedUser
-      try {
-        authenticatedUser = await api('/auth/me/')
-      } catch (error) {
-        if (error.status !== 401) throw error
-      }
+      // Login ya devuelve el perfil autenticado y fija las cookies httpOnly:
+      // reutilizarlo evita una ida y vuelta extra antes de abrir la aplicación.
+      let authenticatedUser = await api('/auth/login/', { method: 'POST', body: credentials })
       if (!authenticatedUser) {
         // /auth/me/ uses 200 + null for an absent/invalid access cookie.
         // Try the refresh cookie once before reporting a session transport issue.

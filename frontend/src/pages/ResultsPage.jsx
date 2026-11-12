@@ -7,6 +7,7 @@ import { Card } from '../components/ui/Card'
 import { EvaluationSelect } from '../components/ui/EvaluationSelect'
 import { DateRangeFilter } from '../components/ui/DateRangeFilter'
 import { ALERT_ERROR, LABEL, PAGE_SUBTITLE, PAGE_TITLE, TH } from '../components/ui/styles'
+import { useAuth } from '../context/AuthContext'
 import { api, errorMessage } from '../lib/api'
 import { ReviewModal } from './ReviewPage'
 
@@ -55,6 +56,8 @@ function SortableHeader({ children, sortKey, activeSort, direction, onSort, alig
 
 // Resultados (solo jefe): lo que obtuvo cada persona, por categoría y promedio general.
 export function ResultsPage() {
+  const { realtimeEvent } = useAuth()
+  const submissionsUpdatedAt = realtimeEvent?.type === 'questions.submitted' ? realtimeEvent.sent_at : null
   const [evaluations, setEvaluations] = useState(null)
   const [evaluation, setEvaluation] = useState('')
   const [area, setArea] = useState('')
@@ -75,7 +78,7 @@ export function ResultsPage() {
     api('/questions/evaluations/?mine=1')
       .then(setEvaluations)
       .catch((e) => setError(errorMessage(e)))
-  }, [])
+  }, [submissionsUpdatedAt])
 
   // Sin evaluación elegida el backend devuelve una por defecto (`result.evaluation`) y aquí se adopta como selección.
   // 'all' (opción "Todas") consolida todas las evaluaciones del jefe.
@@ -96,7 +99,7 @@ export function ResultsPage() {
       })
       .catch((e) => { if (!ignore) setError(errorMessage(e)) })
     return () => { ignore = true }
-  }, [evaluation, dates])
+  }, [evaluation, dates, submissionsUpdatedAt])
 
   // Los filtros Área/Persona/Cargo se derivan de las filas ya cargadas (en cascada: persona y cargo dependen del área).
   const areas = [...new Set((data?.rows || []).map((row) => row.area).filter(Boolean))].sort()

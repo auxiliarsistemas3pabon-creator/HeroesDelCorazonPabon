@@ -13,7 +13,7 @@ export function PasswordInput({ className, ...props }) {
       <input {...props} type={visible ? 'text' : 'password'} className={cn(FIELD, 'pr-10', className)} />
       <button
         type="button"
-        className="absolute inset-y-0 right-3 flex items-center text-app-muted hover:text-app"
+        className="absolute inset-y-0 right-1 flex w-8 items-center justify-center text-app-muted hover:text-app"
         onClick={() => setVisible((v) => !v)}
         aria-label={visible ? 'Ocultar contraseña' : 'Mostrar contraseña'}
         title={visible ? 'Ocultar contraseña' : 'Mostrar contraseña'}

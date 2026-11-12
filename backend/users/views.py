@@ -171,6 +171,35 @@ class RegisterView(AuditLogMixin, generics.CreateAPIView):
     throttle_scope = "login"
 
 
+class AdminUsersView(AuditLogMixin, APIView):
+    """Lista usuarios y permite actualizar rol o restablecer contraseña."""
+    permission_classes = [IsSuperAdmin]
+
+    def get(self, request):
+        users = User.objects.all().order_by("username")
+        return Response(UserSerializer(users, many=True).data)
+
+    def patch(self, request, user_id):
+        try:
+            user = User.objects.get(pk=user_id)
+        except User.DoesNotExist:
+            return Response({"detail": _("User not found.")}, status=status.HTTP_404_NOT_FOUND)
+        if user.pk == request.user.pk and request.data.get("role") != User.Role.SUPERADMIN:
+            return Response({"detail": _("You cannot remove your own superadmin role.")}, status=status.HTTP_400_BAD_REQUEST)
+        if "role" in request.data:
+            role = request.data["role"]
+            if role not in User.Role.values:
+                return Response({"role": [_ ("Select a valid role.")]}, status=status.HTTP_400_BAD_REQUEST)
+            user.role = role
+        if "new_password" in request.data:
+            serializer = PasswordChangeSerializer(data={"new_password": request.data["new_password"]}, context={"target_user": user})
+            serializer.is_valid(raise_exception=True)
+            user.set_password(serializer.validated_data["new_password"])
+            user.password_change_required = True
+        user.save()
+        return Response(UserSerializer(user).data)
+
+
 class StaffImportView(AuditLogMixin, APIView):
     """POST /users/import/: superadmin importa personal desde Excel dentro de una transacción.
 
@@ -216,7 +245,10 @@ class StaffCandidatesView(AuditLogMixin, APIView):
 
     def get(self, request):
         staff = (
-            User.objects.filter(role=User.Role.PERSONAL, is_active=True)
+            User.objects.filter(
+                role__in=[User.Role.COLLABORATOR, User.Role.PERSONAL],
+                is_active=True,
+            )
             .exclude(area="")
             .order_by("first_name", "last_name", "id")
             .values("id", "first_name", "last_name", "area")

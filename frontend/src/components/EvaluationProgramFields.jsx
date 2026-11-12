@@ -146,7 +146,7 @@ export function EvaluationProgramFields({ program, disabled = false, createNew =
           step="1"
           value={value}
           placeholder={disabled ? 'Selecciona una evaluación primero' : ''}
-          onChange={(e) => randomSelection && setValue(e.target.value)}
+          onChange={(e) => setValue(e.target.value)}
           onKeyDown={(e) => ['-', '+', '.', 'e', 'E'].includes(e.key) && e.preventDefault()}
           required
         />

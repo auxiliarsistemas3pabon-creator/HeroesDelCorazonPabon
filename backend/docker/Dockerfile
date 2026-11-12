@@ -19,10 +19,12 @@ RUN apt-get update \
     && ACCEPT_EULA=Y apt-get install -y --no-install-recommends msodbcsql18 \
     && rm -rf /var/lib/apt/lists/*
 
-# Dependencies first to take advantage of the Docker cache (dev | prod)
-ARG REQUIREMENTS=dev
+# Use production dependencies by default. docker-compose.yml explicitly selects
+# dev for local development; docker-compose.prod.yml explicitly selects prod.
+ARG REQUIREMENTS=prod
 COPY requirements/ /app/requirements/
-RUN pip install -r requirements/${REQUIREMENTS}.txt
+RUN pip install -r requirements/${REQUIREMENTS}.txt \
+    && python -c "import daphne; print('Daphne installed:', daphne.__version__)"
 
 COPY . /app/
 
@@ -32,4 +34,4 @@ RUN sed -i 's/\r$//' /entrypoint.sh && chmod +x /entrypoint.sh
 EXPOSE 8000
 
 ENTRYPOINT ["/entrypoint.sh"]
-CMD ["python", "manage.py", "runserver", "0.0.0.0:8000"]
+CMD ["sh", "-c", "daphne -b 0.0.0.0 -p ${PORT:-8000} config.asgi:application"]

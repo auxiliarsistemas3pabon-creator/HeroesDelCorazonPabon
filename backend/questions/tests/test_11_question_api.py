@@ -1,3 +1,5 @@
+from unittest.mock import patch
+
 from rest_framework.test import APITestCase
 
 from users.models import User
@@ -33,6 +35,14 @@ class QuestionTests(APITestCase):
         r = self.client.post("/api/v1/questions/", self.payload(self.pedro), format="json")
         self.assertEqual(r.status_code, 201)
         self.assertEqual(Question.objects.filter(collaborator=self.laura, personal=self.pedro).count(), 12)
+
+    @patch("realtime.events.publish_event")
+    def test_submission_notifies_managers_over_realtime(self, publish_event):
+        self.client.force_authenticate(self.laura)
+        response = self.client.post("/api/v1/questions/", self.payload(self.pedro), format="json")
+
+        self.assertEqual(response.status_code, 201)
+        publish_event.assert_called_once_with("questions.submitted", "managers")
 
     def test_evaluation_only_allows_selected_staff_members(self):
         excluded = create_user("excluded.demo", User.Role.COLLABORATOR)

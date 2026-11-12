@@ -20,6 +20,7 @@ describe('connectRealtime', () => {
   })
 
   it('conecta al backend configurado usando WSS en producción', () => {
+    vi.stubEnv('DEV', false)
     vi.stubEnv('VITE_API_URL', 'https://heroesdelcorazon-pabon.onrender.com')
     vi.stubGlobal('WebSocket', MockWebSocket)
 
@@ -30,7 +31,7 @@ describe('connectRealtime', () => {
     })
 
     expect(MockWebSocket.instances[0].url).toBe(
-      'wss://heroesdelcorazon-pabon.onrender.com/ws/events/',
+      `${window.location.origin.replace(/^http/, 'ws')}/ws/events/`,
     )
     disconnect()
   })

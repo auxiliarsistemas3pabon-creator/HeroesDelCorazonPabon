@@ -2,9 +2,11 @@ const RETRY_BASE_MS = 1000
 const RETRY_MAX_MS = 30000
 
 function websocketUrl() {
-  // En Vercel no existe un proxy para /ws: conecta directamente con Django/Channels en Render.
-  // En desarrollo, VITE_API_URL suele apuntar al backend local; si queda vacía, usa el proxy de Vite.
-  const apiOrigin = import.meta.env.VITE_API_URL || window.location.origin
+  // Producción comparte origen mediante Nginx: así las cookies de sesión del login
+  // también viajan en el handshake WebSocket. Vite solo usa el origen del backend local.
+  const apiOrigin = import.meta.env.DEV
+    ? import.meta.env.VITE_API_URL || window.location.origin
+    : window.location.origin
   const url = new URL(apiOrigin, window.location.origin)
   url.protocol = url.protocol === 'https:' ? 'wss:' : 'ws:'
   url.pathname = '/ws/events/'

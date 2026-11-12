@@ -21,5 +21,7 @@ urlpatterns = [
     path("users/evaluators/", views.EvaluatorsView.as_view(), name="evaluators"),
     path("users/import/", views.StaffImportView.as_view(), name="staff-import"),
     path("users/register/", views.RegisterView.as_view(), name="register"),
+    path("users/admin/", views.AdminUsersView.as_view(), name="admin-users"),
+    path("users/admin/<int:user_id>/", views.AdminUsersView.as_view(), name="admin-user-detail"),
     path("users/collaborators/", views.CollaboratorsView.as_view(), name="collaborators"),
 ]

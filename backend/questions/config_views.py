@@ -185,6 +185,9 @@ class EvaluationsView(AuditLogMixin, APIView):
             # A boss sees every evaluation (editing is still limited to the ones they created).
             if request.query_params.get("mine") == "1":
                 evaluations = evaluations.filter(questions__isnull=False)
+            # ?created_by=me: solo los formularios propios (el superadmin no se restringe), los únicos que se pueden programar.
+            if request.query_params.get("created_by") == "me":
+                evaluations = evaluations.filter(**owned_by(request.user))
             evaluations = evaluations.distinct()
         data = [_evaluation_data(e) for e in evaluations]
         if request.user.role not in MANAGER_ROLES:
@@ -198,7 +201,10 @@ class EvaluationsView(AuditLogMixin, APIView):
     @transaction.atomic
     def post(self, request):
         if request.user.role not in MANAGER_ROLES:
-            return Response(status=status.HTTP_403_FORBIDDEN)
+            return Response(
+                {"detail": _("Only an area boss or superadmin can create evaluations.")},
+                status=status.HTTP_403_FORBIDDEN,
+            )
         name = _clean(request.data.get("name"))
         if not name:
             return _bad("name", _("Enter a name."))

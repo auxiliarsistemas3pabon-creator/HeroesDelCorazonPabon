@@ -14,8 +14,8 @@ function csrfToken() {
   return match ? decodeURIComponent(match[1]) : csrfTokenValue
 }
 
-async function ensureCsrfToken() {
-  if (csrfToken()) return csrfToken()
+async function ensureCsrfToken(forceRefresh = false) {
+  if (!forceRefresh && csrfToken()) return csrfToken()
   const response = await fetch(`${BASE}/auth/csrf/`, { credentials: 'include' })
   const data = await response.json().catch(() => null)
   if (!response.ok || !data?.csrfToken) {
@@ -39,7 +39,10 @@ export function errorMessage(error, fallback = 'Ocurrió un error') {
   const data = error?.data
   if (error?.status === 404) return 'El servidor no encontró esta ruta de la API. Verifica el despliegue y la ruta solicitada.'
   if (error?.status === 401) return 'Render rechazó el usuario o la contraseña. Verifica las credenciales de esta cuenta.'
-  if (error?.status === 403) return 'Render bloqueó temporalmente el acceso o rechazó la solicitud. Si hubo varios intentos, espera a que expire el bloqueo de seguridad.'
+  if (error?.status === 403) {
+    if (typeof data?.detail === 'string') return data.detail
+    return 'La cuenta no tiene permiso para realizar esta acción. Inicia sesión con una cuenta de jefe o administrador.'
+  }
   if (error?.status === 429) return 'Se alcanzó el límite de intentos. Espera antes de volver a iniciar sesión.'
   if (!data) return fallback
   if (typeof data.detail === 'string') return data.detail
@@ -71,6 +74,11 @@ export async function api(path, options) {
   try {
     return await send(path, options)
   } catch (error) {
+    if (error.status === 403 && typeof error.data?.detail === 'string' && error.data.detail.startsWith('CSRF Failed:')) {
+      csrfTokenValue = ''
+      await ensureCsrfToken(true)
+      return send(path, options)
+    }
     // Access token vencido: intenta renovarlo una vez y repite la petición.
     if (error.status === 401 && !path.startsWith('/auth/')) {
       await send('/auth/refresh/', { method: 'POST' })

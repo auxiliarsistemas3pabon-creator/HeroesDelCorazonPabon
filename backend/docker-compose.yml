@@ -1,4 +1,4 @@
-name: heroes_del_corazon_pabon
+name: heroes_corazon
 
 # Development (run from this folder): docker compose up --build
 #   API     http://localhost:${API_PORT:-8001}          (admin at /admin/)
@@ -35,6 +35,8 @@ services:
   redis:
     image: redis:7-alpine
     restart: unless-stopped
+    volumes:
+      - redis_data:/data
     healthcheck:
       test: ["CMD", "redis-cli", "ping"]
       interval: 5s
@@ -90,4 +92,7 @@ services:
 volumes:
   postgres_data:
     name: heroes_api_postgres_data
+    external: true
+  redis_data:
+    name: heroes_api_redis_data
     external: true

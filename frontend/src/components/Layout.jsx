@@ -4,6 +4,7 @@ import { Link, NavLink, Navigate, Outlet } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
 import { cn } from '../lib/cn'
 import { Button } from './ui/Button'
+import { mediaUrl } from '../lib/media'
 
 // Menú lateral por rol (`user.role`: 'boss' | 'superadmin' | 'collaborator'). Es solo navegación: el control
 // real de acceso lo hace el backend; ocultar un enlace aquí no protege la ruta.
@@ -18,7 +19,7 @@ const BOSS_LINKS = [
 const LINKS = {
   boss: BOSS_LINKS,
   // El superadmin hace todo lo del jefe y además carga datos (personal y evaluaciones).
-  superadmin: [...BOSS_LINKS, { to: '/staff', label: 'Cargar datos', icon: Users }],
+  superadmin: [...BOSS_LINKS, { to: '/users', label: 'Usuarios', icon: Users }, { to: '/staff', label: 'Cargar datos', icon: Users }],
   collaborator: [
     { to: '/evaluations', label: 'Evaluar', icon: ClipboardList },
   ],
@@ -56,7 +57,7 @@ export function Layout() {
             </button>
             <Link to="/" className="flex items-center gap-2">
               <div className="rounded-md bg-white p-1 shadow-sm">
-                <img src="/icons/logo-clinica.png" alt="Clínica Pabón" className="h-9 w-auto" />
+                <img src={mediaUrl('logo-clinica.png')} alt="Clínica Pabón" className="h-9 w-auto" />
               </div>
               <div className="hidden flex-col leading-tight sm:flex">
                 <span className="text-sm font-semibold text-app">Clínica Pabón</span>

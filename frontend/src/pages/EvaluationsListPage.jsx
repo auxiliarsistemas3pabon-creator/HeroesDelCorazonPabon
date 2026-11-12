@@ -13,6 +13,8 @@ import { ratingLabel } from '../lib/ratingScales'
 
 // Ojo: este nombre sombrea el global `URL` del navegador dentro de este módulo.
 const URL = '/questions/evaluations/'
+// Solo las evaluaciones propias: son las únicas que el backend deja editar (las ajenas responden 404).
+const OWN_URL = `${URL}?created_by=me`
 // Filas por página de la tabla (el paginado es en cliente; la API devuelve la lista completa).
 const PAGE_SIZE = 4
 // Mapea el `status` calculado por el backend (disponible/cerrada, incluye cierre por fecha) a su badge.
@@ -259,7 +261,7 @@ export function EvaluationsListPage() {
     // Refresco ligero: solo actualiza el contador de respuestas (no pisa ediciones locales del resto de campos).
     const refreshAnswerCounts = async () => {
       try {
-        const latest = await api(URL)
+        const latest = await api(OWN_URL)
         if (!current) return
         setEvaluations((existing) => existing?.map((evaluation) => {
           const updated = latest.find((item) => item.id === evaluation.id)
@@ -270,7 +272,7 @@ export function EvaluationsListPage() {
       }
     }
 
-    Promise.all([api(URL), api('/users/staff-candidates/')])
+    Promise.all([api(OWN_URL), api('/users/staff-candidates/')])
       .then(([list, candidates]) => {
         if (!current) return
         setEvaluations(list)
@@ -295,7 +297,7 @@ export function EvaluationsListPage() {
     setBusy(true)
     try {
       await api(`${URL}${evaluation.id}/`, { method: 'PATCH', body })
-      setEvaluations(await api(URL))
+      setEvaluations(await api(OWN_URL))
     } catch (e) {
       setError(errorMessage(e))
     } finally {
