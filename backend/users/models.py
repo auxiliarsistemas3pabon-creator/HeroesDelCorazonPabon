@@ -17,6 +17,7 @@ class CustomUserManager(UserManager):
         extra_fields.setdefault("is_staff",False)
         extra_fields.setdefault("is_superuser",False)
         extra_fields.setdefault("role","collaborator")
+        extra_fields.setdefault("is_active",True)
         return super().create_user(username,email,password,**extra_fields)
     
     def create_superuser(self, username, email=None, password=None, **extra_fields):

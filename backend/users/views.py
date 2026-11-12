@@ -212,20 +212,6 @@ class AdminUsersView(AuditLogMixin, APIView):
         return Response(UserSerializer(user).data)
 
 
-class AdminUserActivateView(AuditLogMixin, APIView):
-    """Activa una cuenta mediante una acción explícita, separada del restablecimiento de contraseña."""
-    permission_classes = [IsSuperAdmin]
-
-    def post(self, request, user_id):
-        try:
-            user = User.objects.get(pk=user_id)
-        except User.DoesNotExist:
-            return Response({"detail": _("User not found.")}, status=status.HTTP_404_NOT_FOUND)
-        user.is_active = True
-        user.save(update_fields=["is_active"])
-        return Response(UserSerializer(user).data)
-
-
 class StaffImportView(AuditLogMixin, APIView):
     """POST /users/import/: superadmin importa personal desde Excel dentro de una transacción.
 
