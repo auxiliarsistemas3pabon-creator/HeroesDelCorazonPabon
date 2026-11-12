@@ -160,14 +160,6 @@ export function StaffImportPage() {
         hint="Excel (.xlsx) con las columnas: Número de documento, Nombres, Apellidos (opcional), Área y Cargo. Si un documento ya existe, no se duplica ni se modifica. El documento es el usuario; las contraseñas temporales únicas se mostrarán una sola vez al completar la carga."
       />
 
-      <UploadCard
-        title="Cargar evaluaciones"
-        submitLabel="Guardar evaluaciones"
-        accept=".xlsx,.csv"
-        path="/questions/import/"
-        unit="Evaluaciones"
-        hint="Excel (.xlsx) o CSV con una fila por pregunta y estas columnas: evaluation (nombre), category (categoría) y question (texto de la pregunta). Repite el nombre de evaluación y la categoría en las filas que correspondan. Puedes cargar varias evaluaciones en un archivo; las que ya existan se omiten."
-      />
     </div>
   )
 }
