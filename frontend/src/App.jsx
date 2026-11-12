@@ -52,7 +52,7 @@ function UsersRoute() {
   return user.role === 'superadmin' ? <UsersAdminPage /> : <Navigate to="/dashboard" replace />
 }
 
-// Rutas: /login y /change-password van fuera de <Layout>; el resto se renderiza dentro de Layout, que exige sesión
+// /login va fuera de <Layout>; las demás rutas autenticadas usan Layout y exigen sesión.
 // y define el menú por rol. Ocultar un enlace NO protege la ruta: los permisos reales los aplica el backend.
 function App() {
   return (

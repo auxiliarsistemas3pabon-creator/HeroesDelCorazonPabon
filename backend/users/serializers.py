@@ -147,13 +147,3 @@ class LoginSerializer(serializers.Serializer):
     """Credenciales de login. trim_whitespace=False para no alterar contrasenas con espacios."""
     username = serializers.CharField()
     password = serializers.CharField(write_only=True, trim_whitespace=False)
-
-
-class PasswordResetRequestSerializer(serializers.Serializer):
-    email = serializers.EmailField()
-
-
-class PasswordResetConfirmSerializer(serializers.Serializer):
-    uid = serializers.CharField()
-    token = serializers.CharField()
-    new_password = serializers.CharField(write_only=True, min_length=8)

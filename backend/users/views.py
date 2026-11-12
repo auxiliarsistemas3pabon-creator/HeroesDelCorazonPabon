@@ -1,16 +1,15 @@
 """Vistas de autenticación, cuentas y directorios de usuarios para /api/v1/."""
 
-import logging
 
 from django.conf import settings
 from django.contrib.auth import authenticate
-from django.contrib.auth.tokens import default_token_generator
+
 from django.core.exceptions import PermissionDenied
-from django.core.mail import send_mail
+
 from django.db import transaction
 from django.middleware.csrf import get_token
-from django.utils.encoding import force_bytes, force_str
-from django.utils.http import urlsafe_base64_decode, urlsafe_base64_encode
+
+
 from django.utils.translation import gettext as _
 from axes.utils import reset as reset_login_attempts
 from rest_framework import generics, status
@@ -31,14 +30,11 @@ from .serializers import (
     AuthenticatedUserSerializer,
     LoginSerializer,
     PasswordChangeSerializer,
-    PasswordResetConfirmSerializer,
-    PasswordResetRequestSerializer,
     RegisterSerializer,
     UserSerializer,
 )
 from .staff_import import StaffFileError, import_staff
 
-logger = logging.getLogger(__name__)
 
 # La cookie de refresh solo viaja a /api/v1/auth/*, reduciendo su exposicion al resto de la API.
 REFRESH_COOKIE_PATH = "/api/v1/auth/"
@@ -312,89 +308,3 @@ class CollaboratorsView(generics.ListAPIView):
         # Sin area asignada no se lista a nadie, para no exponer colaboradores de otras areas.
         qs = User.objects.filter(role__in=[User.Role.COLLABORATOR, User.Role.PERSONAL], is_active=True).exclude(pk=user.pk)
         return qs.filter(area=user.area) if user.area else qs.none()
-
-
-class PasswordChangeView(AuditLogMixin, APIView):
-    """POST /auth/password-change/: cambia la contraseña propia y limpia el indicador de clave temporal."""
-    def post(self, request):
-        serializer = PasswordChangeSerializer(
-            data=request.data, context={"request": request, "target_user": request.user}
-        )
-        serializer.is_valid(raise_exception=True)
-        request.user.set_password(serializer.validated_data["new_password"])
-        request.user.password_change_required = False
-        request.user.save(update_fields=["password", "password_change_required"])
-        return Response(status=status.HTTP_204_NO_CONTENT)
-
-
-class PasswordResetRequestView(AuditLogMixin, APIView):
-    """POST /auth/password-reset/: solicita por correo un enlace de recuperación.
-
-    Siempre devuelve HTTP 200 para no revelar si la dirección existe; aplica limitación de tasa.
-    """
-
-    authentication_classes: list = []
-    permission_classes = [AllowAny]
-    throttle_classes = [ScopedRateThrottle]
-    throttle_scope = "login"
-
-    def post(self, request):
-        serializer = PasswordResetRequestSerializer(data=request.data)
-        serializer.is_valid(raise_exception=True)
-        email = serializer.validated_data["email"].strip().lower()
-
-        user = User.objects.filter(email__iexact=email, is_active=True).first()
-        if user:
-            uid = urlsafe_base64_encode(force_bytes(user.pk))
-            token = default_token_generator.make_token(user)
-            link = f"{settings.FRONTEND_BASE_URL}/reset-password?uid={uid}&token={token}"
-            try:
-                send_mail(
-                    subject=_("Password recovery - Heroes del Corazon"),
-                    message=_(
-                        "Hello %(name)s,\n\n"
-                        "We received a request to reset your password. "
-                        "Open the following link:\n\n%(link)s\n\n"
-                        "If it was not you, ignore this email."
-                    )
-                    % {"name": user.first_name, "link": link},
-                    from_email=None,
-                    recipient_list=[user.email],
-                )
-            except Exception:
-                logger.exception("Could not send the password recovery email")
-
-        return Response(
-            {"detail": _("If the email exists, you will receive a link to reset your password.")}
-        )
-
-
-class PasswordResetConfirmView(AuditLogMixin, APIView):
-    """POST /auth/password-reset/confirm/: valida uid y token, aplica reglas y guarda la nueva contraseña."""
-    authentication_classes: list = []
-    permission_classes = [AllowAny]
-    throttle_classes = [ScopedRateThrottle]
-    throttle_scope = "login"
-
-    def post(self, request):
-        serializer = PasswordResetConfirmSerializer(data=request.data)
-        serializer.is_valid(raise_exception=True)
-        data = serializer.validated_data
-
-        try:
-            user = User.objects.get(pk=force_str(urlsafe_base64_decode(data["uid"])))
-        except (User.DoesNotExist, ValueError, TypeError, OverflowError):
-            user = None
-        if user is None or not default_token_generator.check_token(user, data["token"]):
-            return Response(
-                {"detail": _("The link is invalid or has expired.")},
-                status=status.HTTP_400_BAD_REQUEST,
-            )
-
-        check = PasswordChangeSerializer(
-            data={"new_password": data["new_password"]}, context={"target_user": user}
-        )
-        check.is_valid(raise_exception=True)
-        user.set_password(data["new_password"])
-        user.save(update_fields=["password"])
-        return Response({"detail": _("Password updated.")})

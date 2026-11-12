@@ -118,13 +118,6 @@ export function AuthProvider({ children }) {
     }
   }
 
-  // Vuelve a pedir el usuario al backend, p. ej. tras cambiar la contraseña para limpiar password_change_required.
-  async function refreshUser() {
-    const data = await api('/auth/me/')
-    setUser(data)
-    return data
-  }
-
   async function logout() {
     authOperation.current += 1
     await api('/auth/logout/', { method: 'POST' })
@@ -133,7 +126,7 @@ export function AuthProvider({ children }) {
 
   return (
     <AuthContext.Provider
-      value={{ user, loading, login, logout, refreshUser, realtimeStatus, realtimeEvent, realtimeNotice }}
+      value={{ user, loading, login, logout, realtimeStatus, realtimeEvent, realtimeNotice }}
     >
       {children}
     </AuthContext.Provider>
