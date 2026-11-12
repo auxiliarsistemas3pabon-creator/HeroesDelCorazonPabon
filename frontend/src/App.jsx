@@ -15,6 +15,7 @@ const FormProgramPage = lazy(() => import('./pages/FormProgramPage').then((modul
 const PasswordChangePage = lazy(() => import('./pages/PasswordChangePage').then((module) => ({ default: module.PasswordChangePage })))
 const ResultsPage = lazy(() => import('./pages/ResultsPage').then((module) => ({ default: module.ResultsPage })))
 const StaffImportPage = lazy(() => import('./pages/StaffImportPage').then((module) => ({ default: module.StaffImportPage })))
+const UsersAdminPage = lazy(() => import('./pages/UsersAdminPage').then((module) => ({ default: module.UsersAdminPage })))
 
 // Destino de "/": roles `boss`/`superadmin` -> dashboard; los demás -> evaluar.
 // El dashboard es solo del jefe; el colaborador entra directo a evaluar.
@@ -26,6 +27,11 @@ function Home() {
 function StaffRoute() {
   const { user } = useAuth()
   return user.role === 'superadmin' ? <StaffImportPage /> : <Navigate to="/dashboard" replace />
+}
+
+function UsersRoute() {
+  const { user } = useAuth()
+  return user.role === 'superadmin' ? <UsersAdminPage /> : <Navigate to="/dashboard" replace />
 }
 
 // Rutas: /login y /change-password van fuera de <Layout>; el resto se renderiza dentro de Layout, que exige sesión
@@ -49,6 +55,7 @@ function App() {
             <Route path="/program" element={<FormProgramPage/>} />
             {/* Solo el superadmin carga datos; el backend lo exige igualmente */}
             <Route path="/staff" element={<StaffRoute />} />
+            <Route path="/users" element={<UsersRoute />} />
             {/* Cualquier ruta desconocida vuelve al destino autenticado por rol */}
             <Route path="*" element={<Navigate to="/dashboard" replace />} />
           </Route>

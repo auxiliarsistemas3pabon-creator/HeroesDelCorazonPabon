@@ -19,7 +19,7 @@ const BOSS_LINKS = [
 const LINKS = {
   boss: BOSS_LINKS,
   // El superadmin hace todo lo del jefe y además carga datos (personal y evaluaciones).
-  superadmin: [...BOSS_LINKS, { to: '/staff', label: 'Cargar datos', icon: Users }],
+  superadmin: [...BOSS_LINKS, { to: '/users', label: 'Usuarios', icon: Users }, { to: '/staff', label: 'Cargar datos', icon: Users }],
   collaborator: [
     { to: '/evaluations', label: 'Evaluar', icon: ClipboardList },
   ],
