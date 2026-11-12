@@ -12,7 +12,6 @@ const EvaluationPage = lazy(() => import('./pages/EvaluationPage').then((module)
 const EvaluationsListPage = lazy(() => import('./pages/EvaluationsListPage').then((module) => ({ default: module.EvaluationsListPage })))
 const FormCreatePage = lazy(() => import('./pages/FormCreatePage').then((module) => ({ default: module.FormCreatePage })))
 const FormProgramPage = lazy(() => import('./pages/FormProgramPage').then((module) => ({ default: module.FormProgramPage })))
-const PasswordChangePage = lazy(() => import('./pages/PasswordChangePage').then((module) => ({ default: module.PasswordChangePage })))
 const ResultsPage = lazy(() => import('./pages/ResultsPage').then((module) => ({ default: module.ResultsPage })))
 const StaffImportPage = lazy(() => import('./pages/StaffImportPage').then((module) => ({ default: module.StaffImportPage })))
 const UsersAdminPage = lazy(() => import('./pages/UsersAdminPage').then((module) => ({ default: module.UsersAdminPage })))
@@ -45,7 +44,6 @@ function App() {
         <Routes>
           <Route path="/login" element={<LoginPage />} />
           <Route path="/" element={<LoginPage />} />
-          <Route path="/change-password" element={<PasswordChangePage />} />
           <Route element={<Layout />}>
             <Route path="/dashboard" element={<Home />} />
             <Route path="/evaluations" element={<EvaluationPage />} />

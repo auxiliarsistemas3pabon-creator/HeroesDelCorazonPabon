@@ -13,7 +13,9 @@ const PAGE_SIZE = 10
 
 export function UsersAdminPage() {
   const [users, setUsers] = useState([])
-  const [passwords, setPasswords] = useState({})
+  const [passwordUser, setPasswordUser] = useState(null)
+  const [passwordForm, setPasswordForm] = useState({ new_password: '', confirmation: '' })
+  const [savingPassword, setSavingPassword] = useState(false)
   const [query, setQuery] = useState('')
   const [page, setPage] = useState(1)
   const [error, setError] = useState('')
@@ -34,11 +36,25 @@ export function UsersAdminPage() {
     try {
       const updated = await api(`/users/admin/${id}/`, { method: 'PATCH', body: data })
       setUsers((current) => current.map((user) => user.id === id ? updated : user))
-      if (data.new_password) setPasswords((current) => ({ ...current, [id]: '' }))
       setNotice(data.new_password
         ? 'Contraseña restablecida. El usuario puede iniciar sesión con la nueva clave; el estado de la cuenta no se modificó.'
-        : `Cuenta ${updated.is_active ? 'habilitada' : 'inhabilitada'}.`)
+        : data.is_active === false ? 'Cuenta inhabilitada.' : 'Rol actualizado.')
     } catch (e) { setError(errorMessage(e)) }
+  }
+
+  async function savePassword(event) {
+    event.preventDefault()
+    if (passwordForm.new_password !== passwordForm.confirmation) { setError('Las contraseñas no coinciden.'); return }
+    setSavingPassword(true)
+    setError('')
+    try {
+      const updated = await api(`/users/admin/${passwordUser.id}/`, { method: 'PATCH', body: { new_password: passwordForm.new_password } })
+      setUsers((current) => current.map((user) => user.id === updated.id ? updated : user))
+      setNotice('Contraseña actualizada. El estado de la cuenta no se modificó.')
+      setPasswordUser(null)
+      setPasswordForm({ new_password: '', confirmation: '' })
+    } catch (e) { setError(errorMessage(e)) }
+    finally { setSavingPassword(false) }
   }
 
   const filtered = users.filter((user) => !query.trim() || `${user.username} ${user.first_name} ${user.last_name} ${user.area}`.toLowerCase().includes(query.trim().toLowerCase()))
@@ -53,13 +69,12 @@ export function UsersAdminPage() {
     {error && <p role="alert" className="rounded-lg border border-red-300 bg-red-50 p-3 text-sm text-red-800">{error}</p>}
     {notice && <p role="status" className="rounded-lg border border-green-300 bg-green-50 p-3 text-sm text-green-800">{notice}</p>}
     {loading ? <p role="status">Cargando usuarios…</p> : <div className="overflow-x-auto rounded-xl border border-app bg-surface">
-      <table className="w-full min-w-[1050px] text-left text-sm"><thead className="bg-app-muted text-app-muted"><tr>{['Usuario','Nombre','Área','Rol','Estado','Nueva contraseña','Acciones'].map((label) => <th key={label} className="px-4 py-3 font-semibold">{label}</th>)}</tr></thead>
+      <table className="w-full min-w-[950px] text-left text-sm"><thead className="bg-app-muted text-app-muted"><tr>{['Usuario','Nombre','Área','Rol','Estado','Acciones'].map((label) => <th key={label} className="px-4 py-3 font-semibold">{label}</th>)}</tr></thead>
         <tbody>{pageUsers.map((user) => <tr key={user.id} className="border-t border-app">
           <td className="px-4 py-3 font-medium">{user.username}</td><td className="px-4 py-3">{user.first_name} {user.last_name}</td><td className="px-4 py-3">{user.area || '—'}</td>
           <td className="px-4 py-3"><select aria-label={`Rol de ${user.username}`} className="rounded-md border border-app bg-surface px-2 py-2" value={user.role} onChange={(e) => update(user.id, { role: e.target.value })}>{ROLES.map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select></td>
-          <td className="px-4 py-3"><Button size="sm" variant={user.is_active ? 'danger' : 'secondary'} onClick={() => update(user.id, { is_active: !user.is_active })}>{user.is_active ? 'Inhabilitar' : 'Habilitar'}</Button></td>
-          <td className="px-4 py-3"><input aria-label={`Nueva contraseña de ${user.username}`} name={`admin-password-reset-${user.id}`} autoComplete="new-password" type="password" minLength="8" className="w-44 rounded-md border border-app bg-surface px-2 py-2" value={passwords[user.id] || ''} onChange={(e) => setPasswords((current) => ({ ...current, [user.id]: e.target.value }))} placeholder="Mínimo 8 caracteres" /></td>
-          <td className="px-4 py-3"><Button size="sm" disabled={(passwords[user.id] || '').length < 8} onClick={() => update(user.id, { new_password: passwords[user.id] })}>Restablecer</Button></td>
+          <td className="px-4 py-3"><Button size="sm" variant="danger" disabled={!user.is_active} onClick={() => update(user.id, { is_active: false })}>{user.is_active ? 'Inhabilitar' : 'Inhabilitado'}</Button></td>
+          <td className="px-4 py-3"><Button size="sm" variant="secondary" onClick={() => { setError(''); setPasswordUser(user); setPasswordForm({ new_password: '', confirmation: '' }) }}>Cambiar contraseña</Button></td>
         </tr>)}</tbody></table>
       {!filtered.length && <p className="p-6 text-center text-app-muted">No hay usuarios que coincidan.</p>}
     </div>}
@@ -71,5 +86,24 @@ export function UsersAdminPage() {
         <Button variant="secondary" size="sm" disabled={page === pageCount} onClick={() => setPage((current) => current + 1)}>Siguiente</Button>
       </div>
     </nav>}
+    {passwordUser && <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4" onMouseDown={(event) => { if (event.target === event.currentTarget) setPasswordUser(null) }}>
+      <section role="dialog" aria-modal="true" aria-labelledby="password-modal-title" className="w-full max-w-md rounded-xl border border-app bg-surface p-6 shadow-xl">
+        <h2 id="password-modal-title" className="text-lg font-semibold text-app">Cambiar contraseña</h2>
+        <p className="mt-1 text-sm text-app-muted">Cuenta: {passwordUser.username}. El estado de la cuenta no cambiará.</p>
+        {error && <p role="alert" className="mt-3 rounded-lg border border-red-300 bg-red-50 p-3 text-sm text-red-800">{error}</p>}
+        <form className="mt-5 space-y-4" onSubmit={savePassword}>
+          <label className="block space-y-1 text-sm font-medium">Nueva contraseña
+            <input autoFocus autoComplete="new-password" type="password" minLength="8" required className="w-full rounded-lg border border-app bg-surface px-3 py-2" value={passwordForm.new_password} onChange={(event) => setPasswordForm((current) => ({ ...current, new_password: event.target.value }))} />
+          </label>
+          <label className="block space-y-1 text-sm font-medium">Confirmar contraseña
+            <input autoComplete="new-password" type="password" minLength="8" required className="w-full rounded-lg border border-app bg-surface px-3 py-2" value={passwordForm.confirmation} onChange={(event) => setPasswordForm((current) => ({ ...current, confirmation: event.target.value }))} />
+          </label>
+          <div className="flex justify-end gap-2">
+            <Button type="button" variant="secondary" onClick={() => setPasswordUser(null)}>Cancelar</Button>
+            <Button type="submit" loading={savingPassword}>Guardar contraseña</Button>
+          </div>
+        </form>
+      </section>
+    </div>}
   </section>
 }

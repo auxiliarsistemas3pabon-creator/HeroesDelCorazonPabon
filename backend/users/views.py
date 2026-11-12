@@ -193,6 +193,8 @@ class AdminUsersView(AuditLogMixin, APIView):
         active = request.data.get("is_active", user.is_active)
         if "is_active" in request.data and not isinstance(active, bool):
             return Response({"is_active": [_ ("Expected a boolean value.")]}, status=status.HTTP_400_BAD_REQUEST)
+        if "is_active" in request.data and active:
+            return Response({"detail": _("This action only disables accounts.")}, status=status.HTTP_400_BAD_REQUEST)
         if user.pk == request.user.pk and not active:
             return Response({"detail": _("You cannot disable your own account.")}, status=status.HTTP_400_BAD_REQUEST)
         next_role = request.data.get("role", user.role)

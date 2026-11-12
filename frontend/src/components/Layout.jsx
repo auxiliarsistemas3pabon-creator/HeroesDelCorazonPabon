@@ -1,4 +1,4 @@
-import { ClipboardList, KeyRound, List, ListPlus, LayoutDashboard, LogOut, Menu, Trophy, User, Users, X } from 'lucide-react'
+import { ClipboardList, List, ListPlus, LayoutDashboard, LogOut, Menu, Trophy, User, Users, X } from 'lucide-react'
 import { useState } from 'react'
 import { Link, NavLink, Navigate, Outlet } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
@@ -14,7 +14,6 @@ const BOSS_LINKS = [
   { to: '/create', label: 'Crear Evaluacion', icon: ListPlus },
   { to: '/program', label: 'Programar evaluación', icon: ListPlus },
   { to: '/evaluations-list', label: 'Lista de evaluaciones', icon: List },
-  { to: '/change-password', label: 'Cambiar contraseña', icon: KeyRound },
 ]
 
 const LINKS = {
@@ -23,7 +22,6 @@ const LINKS = {
   superadmin: [...BOSS_LINKS, { to: '/users', label: 'Usuarios', icon: Users }, { to: '/staff', label: 'Cargar datos', icon: Users }],
   collaborator: [
     { to: '/evaluations', label: 'Evaluar', icon: ClipboardList },
-    { to: '/change-password', label: 'Cambiar contraseña', icon: KeyRound },
   ],
 }
 
