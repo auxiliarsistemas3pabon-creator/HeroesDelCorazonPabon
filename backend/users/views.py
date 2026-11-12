@@ -184,19 +184,30 @@ class AdminUsersView(AuditLogMixin, APIView):
             user = User.objects.get(pk=user_id)
         except User.DoesNotExist:
             return Response({"detail": _("User not found.")}, status=status.HTTP_404_NOT_FOUND)
-        if user.pk == request.user.pk and request.data.get("role") != User.Role.SUPERADMIN:
-            return Response({"detail": _("You cannot remove your own superadmin role.")}, status=status.HTTP_400_BAD_REQUEST)
         if "role" in request.data:
             role = request.data["role"]
             if role not in User.Role.values:
                 return Response({"role": [_ ("Select a valid role.")]}, status=status.HTTP_400_BAD_REQUEST)
-            user.role = role
+        if user.pk == request.user.pk and "role" in request.data and request.data["role"] != User.Role.SUPERADMIN:
+            return Response({"detail": _("You cannot remove your own superadmin role.")}, status=status.HTTP_400_BAD_REQUEST)
+        active = request.data.get("is_active", user.is_active)
+        if "is_active" in request.data and not isinstance(active, bool):
+            return Response({"is_active": [_ ("Expected a boolean value.")]}, status=status.HTTP_400_BAD_REQUEST)
+        if user.pk == request.user.pk and not active:
+            return Response({"detail": _("You cannot disable your own account.")}, status=status.HTTP_400_BAD_REQUEST)
+        next_role = request.data.get("role", user.role)
+        if user.role == User.Role.SUPERADMIN and user.is_active and (next_role != User.Role.SUPERADMIN or not active):
+            other_active_admins = User.objects.filter(role=User.Role.SUPERADMIN, is_active=True).exclude(pk=user.pk).exists()
+            if not other_active_admins:
+                return Response({"detail": _("At least one active superadmin account must remain.")}, status=status.HTTP_400_BAD_REQUEST)
+        user.role = next_role
         if "new_password" in request.data:
             serializer = PasswordChangeSerializer(data={"new_password": request.data["new_password"]}, context={"target_user": user})
             serializer.is_valid(raise_exception=True)
             user.set_password(serializer.validated_data["new_password"])
             user.password_change_required = True
-            user.is_active = True
+        if "is_active" in request.data:
+            user.is_active = active
         user.save()
         return Response(UserSerializer(user).data)
 

@@ -35,7 +35,9 @@ export function UsersAdminPage() {
       const updated = await api(`/users/admin/${id}/`, { method: 'PATCH', body: data })
       setUsers((current) => current.map((user) => user.id === id ? updated : user))
       if (data.new_password) setPasswords((current) => ({ ...current, [id]: '' }))
-      setNotice('Cambios guardados. Si restableciste la contraseña, el usuario deberá cambiarla al ingresar.')
+      setNotice(data.new_password
+        ? 'Contraseña restablecida. El usuario deberá cambiarla al ingresar; el estado de la cuenta no se modificó.'
+        : `Cuenta ${updated.is_active ? 'habilitada' : 'inhabilitada'}.`)
     } catch (e) { setError(errorMessage(e)) }
   }
 
@@ -51,10 +53,11 @@ export function UsersAdminPage() {
     {error && <p role="alert" className="rounded-lg border border-red-300 bg-red-50 p-3 text-sm text-red-800">{error}</p>}
     {notice && <p role="status" className="rounded-lg border border-green-300 bg-green-50 p-3 text-sm text-green-800">{notice}</p>}
     {loading ? <p role="status">Cargando usuarios…</p> : <div className="overflow-x-auto rounded-xl border border-app bg-surface">
-      <table className="w-full min-w-[850px] text-left text-sm"><thead className="bg-app-muted text-app-muted"><tr>{['Usuario','Nombre','Área','Rol','Nueva contraseña','Acciones'].map((label) => <th key={label} className="px-4 py-3 font-semibold">{label}</th>)}</tr></thead>
+      <table className="w-full min-w-[1050px] text-left text-sm"><thead className="bg-app-muted text-app-muted"><tr>{['Usuario','Nombre','Área','Rol','Estado','Nueva contraseña','Acciones'].map((label) => <th key={label} className="px-4 py-3 font-semibold">{label}</th>)}</tr></thead>
         <tbody>{pageUsers.map((user) => <tr key={user.id} className="border-t border-app">
           <td className="px-4 py-3 font-medium">{user.username}</td><td className="px-4 py-3">{user.first_name} {user.last_name}</td><td className="px-4 py-3">{user.area || '—'}</td>
           <td className="px-4 py-3"><select aria-label={`Rol de ${user.username}`} className="rounded-md border border-app bg-surface px-2 py-2" value={user.role} onChange={(e) => update(user.id, { role: e.target.value })}>{ROLES.map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select></td>
+          <td className="px-4 py-3"><Button size="sm" variant={user.is_active ? 'danger' : 'secondary'} onClick={() => update(user.id, { is_active: !user.is_active })}>{user.is_active ? 'Inhabilitar' : 'Habilitar'}</Button></td>
           <td className="px-4 py-3"><input aria-label={`Nueva contraseña de ${user.username}`} name={`admin-password-reset-${user.id}`} autoComplete="new-password" type="password" minLength="8" className="w-44 rounded-md border border-app bg-surface px-2 py-2" value={passwords[user.id] || ''} onChange={(e) => setPasswords((current) => ({ ...current, [user.id]: e.target.value }))} placeholder="Mínimo 8 caracteres" /></td>
           <td className="px-4 py-3"><Button size="sm" disabled={(passwords[user.id] || '').length < 8} onClick={() => update(user.id, { new_password: passwords[user.id] })}>Restablecer</Button></td>
         </tr>)}</tbody></table>
