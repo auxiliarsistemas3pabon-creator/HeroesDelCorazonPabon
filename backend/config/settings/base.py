@@ -202,21 +202,21 @@ REST_FRAMEWORK = {
 }
 
 ASGI_APPLICATION = "config.asgi.application"
-# Render exposes the linked Key Value connection as REDIS_URL. Prefer it over
-# a stale Docker-only CHANNELS_REDIS_URL (for example redis://redis:6379/3).
-CHANNELS_REDIS_URL = (
-    os.getenv("REDIS_URL")
-    or os.getenv("CHANNELS_REDIS_URL")
-    or "redis://localhost:6379/3"
+# Render exposes REDIS_URL only when a Key Value service is linked. Ignore
+# Docker-only CHANNELS_REDIS_URL there; a missing Redis service uses memory.
+_render_environment = os.getenv("RENDER") == "true" or bool(os.getenv("RENDER_SERVICE_ID"))
+_channels_redis_url = os.getenv("REDIS_URL") or (
+    None if _render_environment else os.getenv("CHANNELS_REDIS_URL", "redis://localhost:6379/3")
 )
-CHANNEL_LAYERS = {
-    "default": {
-        "BACKEND": "channels_redis.core.RedisChannelLayer",
-        "CONFIG": {
-            "hosts": [CHANNELS_REDIS_URL],
-        },
-    },
-}
+if _channels_redis_url:
+    CHANNEL_LAYERS = {
+        "default": {
+            "BACKEND": "channels_redis.core.RedisChannelLayer",
+            "CONFIG": {"hosts": [_channels_redis_url]},
+        }
+    }
+else:
+    CHANNEL_LAYERS = {"default": {"BACKEND": "channels.layers.InMemoryChannelLayer"}}
 
 # SIMPLE JSON WEB TOKEN CONFIG
 SIMPLE_JWT = {

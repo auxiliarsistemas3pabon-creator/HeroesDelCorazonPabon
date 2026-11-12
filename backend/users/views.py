@@ -12,6 +12,7 @@ from django.middleware.csrf import get_token
 from django.utils.encoding import force_bytes, force_str
 from django.utils.http import urlsafe_base64_decode, urlsafe_base64_encode
 from django.utils.translation import gettext as _
+from axes.utils import reset as reset_login_attempts
 from rest_framework import generics, status
 from rest_framework.parsers import MultiPartParser
 from rest_framework.permissions import AllowAny
@@ -208,6 +209,7 @@ class AdminUsersView(AuditLogMixin, APIView):
             serializer.is_valid(raise_exception=True)
             user.set_password(serializer.validated_data["new_password"])
             user.password_change_required = False
+            reset_login_attempts(username=user.username)
         if "is_active" in request.data:
             user.is_active = active
         user.save()
