@@ -2,7 +2,7 @@ from django.contrib import admin
 from django.contrib.auth.admin import UserAdmin
 from django.utils.translation import gettext_lazy as _
 
-from .models import User
+from .models import TrustedDevice, User
 
 
 # Admin de usuarios: extiende UserAdmin de Django con los campos propios (rol y area).

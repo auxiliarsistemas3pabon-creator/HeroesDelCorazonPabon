@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { Navigate, useNavigate } from 'react-router-dom'
 import { PasswordInput } from '../components/PasswordInput'
 import { Button } from '../components/ui/Button'
@@ -6,6 +6,7 @@ import { ALERT_ERROR, FIELD, LABEL } from '../components/ui/styles'
 import { useAuth } from '../context/AuthContext'
 import { errorMessage } from '../lib/api'
 import { mediaUrl } from '../lib/media'
+import { detectPrivateMode } from '../lib/privateMode'
 
 // Textos de marketing del panel izquierdo. Mantenerlos alineados con las reglas reales (escala, cierre).
 const FEATURES = [
@@ -22,6 +23,19 @@ export function LoginPage() {
   const [form, setForm] = useState({ username: '', password: '' })
   const [error, setError] = useState(null)
   const [loading, setLoading] = useState(false)
+  const [privateMode, setPrivateMode] = useState(false)
+
+  // Las ventanas privadas/incógnito no pueden iniciar sesión: no conservan el dispositivo registrado.
+  useEffect(() => {
+    let active = true
+    detectPrivateMode().then((isPrivate) => {
+      if (active && isPrivate) {
+        console.warn('Permiso no autorizado')
+        setPrivateMode(true)
+      }
+    })
+    return () => { active = false }
+  }, [])
 
   if (user) return <Navigate to={user.role === 'boss' || user.role === 'superadmin' ? '/dashboard' : '/evaluations'} replace />
 
@@ -30,10 +44,11 @@ export function LoginPage() {
   async function onSubmit(e) {
     e.preventDefault()
     setError(null)
+    if (privateMode) return
     setLoading(true)
     try {
       // login devuelve el usuario para decidir el destino sin esperar a que el contexto se actualice.
-      const authenticatedUser = await login({ ...form, username: form.username.trim() })
+      const authenticatedUser = await login({ ...form, username: form.username.trim(), private_mode: privateMode })
       navigate(authenticatedUser.role === 'boss' || authenticatedUser.role === 'superadmin' ? '/dashboard' : '/evaluations', { replace: true })
     } catch (err) {
       setError(errorMessage(err, 'Credenciales inválidas'))
@@ -80,6 +95,11 @@ export function LoginPage() {
           </div>
 
           <form onSubmit={onSubmit} className="flex flex-col gap-2.5">
+            {privateMode && (
+              <div role="alert" className={ALERT_ERROR}>
+                No se permite el acceso desde una ventana privada o de incógnito. Usa una ventana normal del navegador.
+              </div>
+            )}
             {error && <div role="alert" className={ALERT_ERROR}>{error}</div>}
             <label className={LABEL}>
               Usuario
@@ -89,7 +109,7 @@ export function LoginPage() {
               Contraseña
               <PasswordInput name="password" autoComplete="current-password" value={form.password} onChange={onChange} required />
             </label>
-            <Button type="submit" loading={loading} fullWidth className="mt-1 !bg-[#c02645] hover:!bg-[#a71932] focus-visible:!ring-[#c02645]/50">
+            <Button type="submit" loading={loading} disabled={privateMode} fullWidth className="mt-1 !bg-[#c02645] hover:!bg-[#a71932] focus-visible:!ring-[#c02645]/50">
               {loading ? 'Ingresando...' : 'Iniciar sesión'}
             </Button>
           </form>

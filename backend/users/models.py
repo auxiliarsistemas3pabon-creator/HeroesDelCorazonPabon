@@ -77,3 +77,27 @@ class User(AbstractUser):
 
     def __str__(self) -> str:
         return f"{self.username}"
+
+
+class TrustedDevice(models.Model):
+    """Navegador/dispositivo registrado de un usuario.
+
+    La sesion (JWT) queda ligada a este dispositivo: el identificador viaja en una cookie
+    httpOnly y solo se guarda su hash. Un token robado sin la cookie del dispositivo no sirve.
+    """
+
+    user = models.ForeignKey(User, on_delete=models.CASCADE, related_name="devices")
+    token_hash = models.CharField(max_length=64, unique=True)
+    user_agent = models.CharField(max_length=300, blank=True)
+    ip_address = models.CharField(max_length=64, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    last_seen = models.DateTimeField(auto_now_add=True)
+    revoked = models.BooleanField(default=False)
+
+    class Meta:
+        verbose_name = _("Trusted device")
+        verbose_name_plural = _("Trusted devices")
+        ordering = ["-last_seen"]
+
+    def __str__(self) -> str:
+        return f"{self.user_id}:{self.pk}"

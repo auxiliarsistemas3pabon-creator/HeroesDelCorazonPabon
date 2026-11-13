@@ -24,8 +24,10 @@ from rest_framework_simplejwt.tokens import RefreshToken
 
 from audit.mixins import AuditLogMixin
 from common.permissions import IsBossOrSuperAdmin, IsSuperAdmin
+from common.security import UNAUTHORIZED_MESSAGE, log_unauthorized, looks_malicious
 
 from .areas import is_removed_area
+from .devices import DEVICE_CLAIM, find_device, register_device, set_device_cookie
 from .models import User
 from .serializers import (
     AuthenticatedUserSerializer,
@@ -82,34 +84,72 @@ class LoginView(AuditLogMixin, APIView):
 
     def post(self, request):
         serializer = LoginSerializer(data=request.data)
-        serializer.is_valid(raise_exception=True)
+        if not serializer.is_valid():
+            log_unauthorized(request, "invalid_login_payload")
+            return Response(
+                {"detail": UNAUTHORIZED_MESSAGE, "code": "unauthorized_access"},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
         credentials = serializer.validated_data
+        username = credentials["username"]
+        password = credentials["password"]
+
+        # El navegador declara si esta en modo privado/incognito. Es defensa en
+        # profundidad: el bloqueo principal ocurre en el frontend.
+        if request.data.get("private_mode") is True:
+            log_unauthorized(request, "private_mode")
+            return Response(
+                {"detail": _("Private or incognito windows are not allowed. Use a regular browser window."),
+                 "code": "private_mode"},
+                status=status.HTTP_403_FORBIDDEN,
+            )
+        if looks_malicious(username):
+            log_unauthorized(request, "malicious_username")
+            return Response(
+                {"detail": UNAUTHORIZED_MESSAGE, "code": "unauthorized_access"},
+                status=status.HTTP_403_FORBIDDEN,
+            )
 
         # Axes locks a username/IP pair after repeated failures. Check a valid
         # password against Django's normal backend first so a stale lockout
         # cannot reject the account owner; invalid credentials still pass
         # through Axes below and continue to count toward brute-force limits.
-        user = ModelBackend().authenticate(request=request, **credentials)
+        user = ModelBackend().authenticate(request=request, username=username, password=password)
         if user is not None and user.is_active:
             reset_login_attempts(username=user.username)
         else:
             user = None
         try:
             if user is None:
-                user = authenticate(request=request, **credentials)
+                user = authenticate(request=request, username=username, password=password)
         except PermissionDenied:  # django-axes: account temporarily locked
+            log_unauthorized(request, "locked_out")
             return Response(
                 {"detail": _("Too many failed attempts. Try again later.")},
                 status=status.HTTP_403_FORBIDDEN,
             )
         if user is None or not user.is_active:
+            registered = User.objects.filter(username=username).exists()
+            log_unauthorized(request, "wrong_password" if registered else "unknown_user")
+            if not registered:
+                return Response(
+                    {"detail": _("User not found."), "code": "user_not_found"},
+                    status=status.HTTP_401_UNAUTHORIZED,
+                )
             return Response(
-                {"detail": _("Invalid credentials.")}, status=status.HTTP_401_UNAUTHORIZED
+                {"detail": UNAUTHORIZED_MESSAGE, "code": "unauthorized_access"},
+                status=status.HTTP_401_UNAUTHORIZED,
             )
 
+        # Usuario registrado con clave correcta: se registra/reutiliza el dispositivo
+        # y la sesion queda ligada a el.
+        device, raw_device = register_device(request, user)
         get_token(request)  # forces the csrftoken cookie for the frontend
         response = Response(AuthenticatedUserSerializer(user).data)
-        _set_auth_cookies(response, RefreshToken.for_user(user))
+        refresh = RefreshToken.for_user(user)
+        refresh[DEVICE_CLAIM] = device.pk
+        _set_auth_cookies(response, refresh)
+        set_device_cookie(response, raw_device)
         return response
 
 
@@ -134,12 +174,22 @@ class RefreshView(AuditLogMixin, APIView):
         try:
             old = RefreshToken(raw)
             user = User.objects.get(pk=old["user_id"], is_active=True)
+            claimed_device = old.get(DEVICE_CLAIM)
+            # Una sesion ligada a un dispositivo solo se renueva desde ese mismo dispositivo.
+            if claimed_device is not None and find_device(request, user.pk, claimed_device) is None:
+                log_unauthorized(request, "device_mismatch")
+                return Response({"detail": _("Session expired.")}, status=status.HTTP_401_UNAUTHORIZED)
             old.blacklist()
         except (TokenError, User.DoesNotExist):
             return Response({"detail": _("Session expired.")}, status=status.HTTP_401_UNAUTHORIZED)
 
+        # Sesiones emitidas antes de esta version no traen dispositivo: se registran aqui.
+        device, raw_device = register_device(request, user)
         response = Response({"detail": "ok"})
-        _set_auth_cookies(response, RefreshToken.for_user(user))
+        new_refresh = RefreshToken.for_user(user)
+        new_refresh[DEVICE_CLAIM] = device.pk
+        _set_auth_cookies(response, new_refresh)
+        set_device_cookie(response, raw_device)
         return response
 
 

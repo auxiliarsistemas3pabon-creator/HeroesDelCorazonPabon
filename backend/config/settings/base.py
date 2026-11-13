@@ -64,6 +64,7 @@ INSTALLED_APPS = ["daphne", "channels"] + DJANGO_APPS + THIRD_PARTY_APPS + LOCAL
 MIDDLEWARE = [
     'corsheaders.middleware.CorsMiddleware',
     'django.middleware.security.SecurityMiddleware',
+    'common.security.MaliciousInputMiddleware',
     'whitenoise.middleware.WhiteNoiseMiddleware',
     'django.contrib.sessions.middleware.SessionMiddleware',
     'django.middleware.common.CommonMiddleware',
