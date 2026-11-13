@@ -1,6 +1,4 @@
-import re
 
-from django.core import mail
 from rest_framework.test import APITestCase
 
 from .models import User
@@ -39,26 +37,8 @@ class AuthTests(APITestCase):
             "/api/v1/auth/login/",
             {"username": "' OR '1'='1' --", "password": PASSWORD},
         )
-        self.assertEqual(r.status_code, 401)
+        self.assertEqual(r.status_code, 403)
         self.assertNotIn("access_token", r.cookies)
-
-    def test_temporary_password_requires_change_before_using_the_api(self):
-        self.boss.password_change_required = True
-        self.boss.save(update_fields=["password_change_required"])
-
-        r = self.client.post("/api/v1/auth/login/", {"username": "boss.demo", "password": PASSWORD})
-        self.assertTrue(r.data["password_change_required"])
-        self.assertEqual(self.client.get("/api/v1/auth/me/").status_code, 200)
-        self.assertEqual(self.client.get("/api/v1/users/collaborators/").status_code, 403)
-
-        r = self.client.post(
-            "/api/v1/auth/password-change/",
-            {"current_password": PASSWORD, "new_password": "Another-Strong-2026"},
-        )
-        self.assertEqual(r.status_code, 204)
-        self.boss.refresh_from_db()
-        self.assertFalse(self.boss.password_change_required)
-        self.assertEqual(self.client.get("/api/v1/users/collaborators/").status_code, 200)
 
     def test_me_without_session(self):
         response = self.client.get("/api/v1/auth/me/")
@@ -68,7 +48,7 @@ class AuthTests(APITestCase):
     def test_cookie_requires_csrf_on_post(self):
         self.client.post("/api/v1/auth/login/", {"username": "boss.demo", "password": PASSWORD})
         self.client.handler.enforce_csrf_checks = True
-        r = self.client.post("/api/v1/auth/password-change/", {"new_password": "Other-Pass-2026"})
+        r = self.client.post("/api/v1/users/register/", {"username": "x"})
         self.assertEqual(r.status_code, 403)
 
     def test_refresh_and_logout(self):
@@ -81,39 +61,7 @@ class AuthTests(APITestCase):
 
     def test_messages_are_translated_to_spanish(self):
         r = self.client.post("/api/v1/auth/login/", {"username": "boss.demo", "password": "wrong"})
-        self.assertEqual(r.data["detail"], "Credenciales inválidas.")
-
-
-class PasswordRecoveryTests(APITestCase):
-    def setUp(self):
-        create_user("laura.demo")
-
-    def test_sends_email_with_link_and_allows_reset(self):
-        r = self.client.post("/api/v1/auth/password-reset/", {"email": "laura.demo@demo.com"})
-        self.assertEqual(r.status_code, 200)
-        self.assertEqual(len(mail.outbox), 1)
-        self.assertEqual(mail.outbox[0].to, ["laura.demo@demo.com"])
-
-        m = re.search(r"reset-password\?uid=([^&\s]+)&token=(\S+)", mail.outbox[0].body)
-        r = self.client.post(
-            "/api/v1/auth/password-reset/confirm/",
-            {"uid": m.group(1), "token": m.group(2), "new_password": "New-Pass-2026"},
-        )
-        self.assertEqual(r.status_code, 200)
-        r = self.client.post("/api/v1/auth/login/", {"username": "laura.demo", "password": "New-Pass-2026"})
-        self.assertEqual(r.status_code, 200)
-
-    def test_unknown_email_reveals_nothing(self):
-        r = self.client.post("/api/v1/auth/password-reset/", {"email": "nobody@demo.com"})
-        self.assertEqual(r.status_code, 200)
-        self.assertEqual(len(mail.outbox), 0)
-
-    def test_invalid_token(self):
-        r = self.client.post(
-            "/api/v1/auth/password-reset/confirm/",
-            {"uid": "MQ", "token": "invalid", "new_password": "New-Pass-2026"},
-        )
-        self.assertEqual(r.status_code, 400)
+        self.assertEqual(r.data["detail"], "Acceso no autorizado.")
 
 
 class RegisterTests(APITestCase):
@@ -214,7 +162,7 @@ class StaffImportTests(APITestCase):
         ana_password = next(item["password"] for item in credentials if item["username"] == "1002")
         self.assertNotEqual(ana_password, "1002")
         self.assertTrue(ana.check_password(ana_password))
-        self.assertTrue(ana.password_change_required)
+        self.assertFalse(ana.password_change_required)
         self.assertIsNone(ana.email)
         self.assertEqual(User.objects.get(username="1001").first_name, "Ya")  # the existing user is untouched
         self.assertFalse(User.objects.filter(username="1004").exists())

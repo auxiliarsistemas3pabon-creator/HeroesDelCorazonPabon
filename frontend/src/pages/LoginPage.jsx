@@ -82,6 +82,7 @@ export function LoginPage() {
         <img
           className="pointer-events-none absolute bottom-0 right-0 z-0 h-52 w-auto max-w-[46%] object-contain object-bottom drop-shadow-2xl"
           src={mediaUrl('paboncito.png')}
+          fetchPriority="high"
           alt=""
           aria-hidden
         />

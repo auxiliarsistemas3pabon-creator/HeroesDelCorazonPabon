@@ -1,0 +1,44 @@
+Ran 124 tests in 44.652s
+OK
+Name                               Stmts   Miss  Cover   Missing
+----------------------------------------------------------------
+audit/__init__.py                      0      0   100%
+audit/logging.py                      18      2    89%   57, 59
+audit/mixins.py                       17      0   100%
+common/__init__.py                     0      0   100%
+common/authentication.py              32      0   100%
+common/pagination.py                   5      0   100%
+common/permissions.py                 26      2    92%   28-29
+common/security.py                    59      0   100%
+config/__init__.py                     0      0   100%
+config/urls.py                        11      3    73%   25, 30, 53
+questions/__init__.py                  0      0   100%
+questions/admin.py                    18      0   100%
+questions/apps.py                      4      0   100%
+questions/config_views.py            377     71    81%   110, 114, 116, 144, 169, 187, 190, 213, 216, 219-227, 231-238, 259, 264-267, 269-272, 293, 315, 323, 330-334, 336-338, 348, 378, 385, 396, 406, 414, 420, 428, 476, 519, 528, 535, 559, 567, 585, 600, 609-611, 626-635, 653
+questions/limits.py                   34     11    68%   46-56
+questions/management/__init__.py       0      0   100%
+questions/models.py                  104      6    94%   12-13, 93, 113, 131, 189
+questions/notifications.py            19      3    84%   18, 42-43
+questions/serializers.py              61      2    97%   62, 64
+questions/staff_import.py            151     62    59%   50, 52, 61-62, 73, 137-209, 234-235, 243-244
+questions/urls.py                      4      0   100%
+questions/views.py                   249     24    90%   34, 126, 183, 187-189, 250, 254, 310-317, 326, 329, 332-334, 361, 392, 395, 403, 414-415, 422
+realtime/__init__.py                   0      0   100%
+realtime/auth.py                      33     33     0%   3-44
+realtime/consumers.py                 32     32     0%   3-58
+realtime/events.py                    20      4    80%   31-32, 38-39
+realtime/routing.py                    3      3     0%   3-7
+users/__init__.py                      0      0   100%
+users/admin.py                        10      0   100%
+users/apps.py                          4      0   100%
+users/areas.py                         3      0   100%
+users/devices.py                      37      0   100%
+users/management/__init__.py           0      0   100%
+users/models.py                       60      0   100%
+users/serializers.py                  82     10    88%   73, 81, 87, 121-122, 133-139
+users/staff_import.py                 61      2    97%   37, 55
+users/urls.py                          3      0   100%
+users/views.py                       206      1    99%   266
+----------------------------------------------------------------
+TOTAL                               1743    271    84%

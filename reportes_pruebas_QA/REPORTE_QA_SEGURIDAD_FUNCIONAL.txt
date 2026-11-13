@@ -1,0 +1,34 @@
+REPORTE QA - SEGURIDAD Y PRUEBAS FUNCIONALES - Heroes del Corazon
+Fecha: 2026-11-13
+
+REQUISITO -> RESULTADO
+ 1. Bloquear incognito ........... PARCIAL. El login detecta ventana privada (Chromium, Firefox, Safari),
+    se deshabilita y muestra aviso; el backend rechaza el aviso private_mode con 403. La deteccion es de
+    mejor esfuerzo: un cliente que mienta, o un navegador no detectable, puede pasar. Ante la duda deja
+    pasar para no bloquear usuarios legitimos. La defensa real es la sesion por dispositivo.
+ 2. Proteccion SQLi / scripts .... OK. Un middleware rechaza con 403 "Acceso no autorizado" y registra en
+    el log; el ORM ya parametriza las consultas. Probado en usuario, query string y cuerpos anidados.
+ 3. Restriccion por dispositivo .. OK. La sesion JWT queda ligada a un dispositivo registrado (cookie
+    httpOnly; en base solo se guarda el hash). Cookies de sesion robadas sin la cookie del dispositivo
+    dan 401. Tope de 5 dispositivos por usuario. MFA NO se implemento: se eligio la alternativa
+    "sesiones por dispositivo registrado".
+ 4. Usuarios registrados no se bloquean ... OK. Entran desde un dispositivo nuevo (se registra). El
+    bloqueo de Axes no deja afuera al dueño con la clave correcta.
+ 5. Usuario no registrado ........ OK. Frontend: "Usuario no encontrado."; consola del navegador:
+    "Permiso no autorizado"; log del servidor: "PERMISO NO AUTORIZADO | reason=unknown_user".
+ 6. Registrado + clave incorrecta  OK. Frontend: "Acceso no autorizado.".
+ 7. QR como modal ................ NO HECHO: la app no tiene QR ni MFA. Pendiente de definicion.
+
+PRUEBAS FUNCIONALES EN VIVO (Docker local, curl)
+  usuario inexistente   -> 401 {"code":"user_not_found"}
+  SQLi en usuario       -> 403 {"code":"unauthorized_access"}
+  <script> en usuario   -> 403
+  private_mode=true     -> 403 {"code":"private_mode"}
+PRUEBAS AUTOMATIZADAS: ver REPORTE_PRUEBAS_UNITARIAS.txt (backend 124 OK, frontend 95 OK).
+
+RIESGOS Y NOTAS
+ - Distinguir "usuario no encontrado" de "acceso no autorizado" permite enumerar usuarios (pedido expreso).
+ - Las sesiones abiertas antes del despliegue siguen validas y se ligan a un dispositivo al renovarse.
+ - Se corrigio un bug previo (cookie de acceso vacia -> 401).
+ - Pendiente: purga de dispositivos revocados; MFA/QR si se desea.
+ - Despliegue: el estado de git no es limpio (ver mensaje final); el push a Render NO esta confirmado.

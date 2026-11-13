@@ -1,0 +1,73 @@
+REPORTE DE ACCESIBILIDAD, LATENCIA Y RENDIMIENTO - Heroes del Corazon
+Fecha: 2026-11-13   Entorno: local (Windows 11, Docker Desktop saturado por otros proyectos)
+Herramientas: Lighthouse 12 (Chrome headless, perfil movil por defecto), script propio latency_test.py (libreria estandar de Python)
+
+======================================================================
+1. LIGHTHOUSE - pagina /login (build de produccion servido con vite preview)
+======================================================================
+NOTA DE CALIDAD DE LA PRUEBA: una primera corrida auditó por error el preview de OTRO proyecto
+(puerto 4173 ocupado). Esos resultados se descartaron; las cifras de abajo son de esta app.
+
+                      ANTES    DESPUES
+ Rendimiento            96        96
+ Accesibilidad         100       100
+ Buenas practicas      100       100
+ SEO                    83       100
+ FCP                  1.5 s     1.5 s
+ LCP                  2.7 s     2.7 s
+ TBT                  10 ms     20 ms (ruido de medicion)
+ CLS                    0         0
+ Peso total de carga  429 KiB   241 KiB   (-44 %)
+
+Accesibilidad: 100/100, sin auditorias fallidas.
+Cambios aplicados:
+ - SEO: se agrego meta description y theme-color en index.html y public/robots.txt
+   (bloquea /api/ y /ws/). Corrige "meta-description" y "robots-txt" (83 -> 100).
+ - Peso: el favicon se descargaba como PNG de 193 KB desde el backend de Render
+   (otro origen, lento en arranque en frio). Ahora se sirve local como WebP (31 KB).
+ - La imagen LCP de la pagina de login recibe fetchPriority="high".
+ - Nginx (Render): se activo gzip para JS/CSS/JSON/SVG (no medible con vite preview;
+   debe verificarse tras el despliegue con "curl -H 'Accept-Encoding: gzip' -I").
+Pendiente: LCP 2.7 s (elemento: imagen decorativa paboncito.webp; el retraso es de render
+por JavaScript, ~180 ms). Se recomienda dividir recharts/xlsx (ya cargan bajo demanda).
+Archivos: lighthouse_login_antes.report.html/.json, lighthouse_login_despues.report.html/.json
+Solo se audito /login: las demas rutas exigen sesion y no se auditaron.
+
+======================================================================
+2. LATENCIA Y CARGA - API Django en Docker (http://localhost:8011)
+======================================================================
+Secuencial: 15 a 30 peticiones por endpoint. Carga: 5 sesiones concurrentes x 60 peticiones.
+Valores en milisegundos. ANTES = codigo con seguridad nueva pero sin optimizar.
+  POST /auth/login/ (correcto)                             ANTES avg  408.2 p95  539.6 | DESPUES avg  405.9 p95  544.6 p99  544.6 | {'200': 15}
+  POST /auth/login/ (usuario inexistente)                  ANTES avg  444.0 p95  699.4 | DESPUES avg   45.7 p95   58.9 p99   58.9 | {'401': 15}
+  POST /auth/login/ (SQLi bloqueado)                       ANTES avg   10.8 p95   16.7 | DESPUES avg    7.9 p95   11.2 p99   11.2 | {'403': 15}
+  GET /api/v1/auth/me/                                     ANTES avg   36.4 p95   56.9 | DESPUES avg   34.5 p95   54.2 p99   59.4 | {'200': 30}
+  GET /api/v1/auth/csrf/                                   ANTES avg   11.8 p95   19.0 | DESPUES avg   12.3 p95   31.5 p99   31.7 | {'200': 30}
+  GET /api/v1/users/areas/                                 ANTES avg   29.7 p95   44.4 | DESPUES avg   29.0 p95   46.3 p99   49.1 | {'200': 30}
+  GET /api/v1/users/collaborators/                         ANTES avg   46.6 p95   64.3 | DESPUES avg   36.0 p95   51.6 p99   53.4 | {'200': 30}
+  GET /api/v1/users/staff-candidates/                      ANTES avg   33.0 p95   51.6 | DESPUES avg   30.4 p95   38.5 p99   43.3 | {'403': 30}
+  GET /api/v1/users/evaluators/                            ANTES avg   34.6 p95   47.8 | DESPUES avg   31.5 p95   47.2 p99   82.9 | {'403': 30}
+  GET /api/v1/questions/evaluations/                       ANTES avg   35.7 p95   53.0 | DESPUES avg   37.5 p95   54.2 p99   62.2 | {'200': 30}
+
+  GET /auth/me/ x5 sesiones concurrentes                   ANTES avg  174.1 p95  253.1 | DESPUES avg  119.5 p95  194.2 p99  292.3 | {'200': 300} | 28.4 -> 41.5 req/s
+  GET /users/collaborators/ x5 sesiones concurrentes       ANTES avg  125.1 p95  207.4 | DESPUES avg  112.2 p95  202.7 p99  231.2 | {'200': 300} | 39.5 -> 44.0 req/s
+Lectura:
+ - Login con usuario inexistente: 444 ms -> 46 ms (10x). Antes se calculaba el hash de la
+   clave dos veces; ahora solo se verifica antes la existencia del usuario. Tambien reduce
+   la amplificacion de CPU que un atacante lograba con usuarios falsos.
+ - Login correcto (~400 ms) es el costo del hash PBKDF2 de Django; es deliberado y no se
+   reduce por seguridad.
+ - Peticion SQLi/script bloqueada: ~8 ms (el middleware rechaza antes de tocar la base).
+ - Lecturas autenticadas secuenciales: 30-38 ms.
+ - Carga concurrente: latencia media 174 -> 120 ms y 28 -> 41 req/s en /auth/me/.
+   Mejora por conexiones persistentes a PostgreSQL (CONN_MAX_AGE=60 + health checks).
+ - Limite observado: Daphne ejecuta las vistas sincronas en un solo hilo, por lo que el
+   throughput se mantiene bajo (~40-45 req/s). Recomendacion: varios workers (por ejemplo
+   uvicorn/gunicorn) si la carga real lo exige; no se cambio porque la instancia gratuita
+   de Render tiene poca memoria.
+ - Las mediciones locales estan afectadas por la saturacion de Docker (otros contenedores
+   usaban >100 % de CPU). Tomarlas como orden de magnitud, no como cifras de produccion.
+Hallazgo de diseno: cada inicio de sesion desde un navegador sin cookie de dispositivo crea
+una fila en TrustedDevice y las revocadas no se purgan (124 filas tras la prueba). Conviene
+una limpieza periodica. El tope de 5 dispositivos por usuario revoca los mas antiguos.
+Archivos: latency_test.py, latency_results_antes.json, latency_results_despues.json

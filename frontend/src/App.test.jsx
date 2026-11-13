@@ -45,10 +45,6 @@ vi.mock('./pages/LoginPage', () => ({
   LoginPage: () => <div>LoginPage</div>,
 }))
 
-vi.mock('./pages/PasswordChangePage', () => ({
-  PasswordChangePage: () => <div>PasswordChangePage</div>,
-}))
-
 vi.mock('./pages/ResultsPage', () => ({
   ResultsPage: () => <div>ResultsPage</div>,
 }))
@@ -108,12 +104,6 @@ describe('App.jsx - Rutas, autenticación y permisos', () => {
     expect(screen.getByText('LoginPage')).toBeInTheDocument()
   })
 
-  it('debe mostrar cambio de contraseña', async () => {
-    renderApp('/change-password')
-
-    expect(await screen.findByText('PasswordChangePage')).toBeInTheDocument()
-  })
-
   // ===================================================
   // 2. AUTENTICACIÓN DEL LAYOUT
   // ===================================================
@@ -139,20 +129,6 @@ describe('App.jsx - Rutas, autenticación y permisos', () => {
     renderApp('/results')
 
     expect(screen.getByText('LoginPage')).toBeInTheDocument()
-  })
-
-  it('debe redirigir a cambio de contraseña si es obligatorio', async () => {
-    mockUseAuth.mockReturnValue({
-      user: {
-        ...usuario,
-        password_change_required: true,
-      },
-      loading: false,
-    })
-
-    renderApp('/results')
-
-    expect(await screen.findByText('PasswordChangePage')).toBeInTheDocument()
   })
 
   // ===================================================

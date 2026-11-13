@@ -4,6 +4,14 @@ server {
     root /usr/share/nginx/html;
     index index.html;
 
+    # Compresion de texto: reduce el peso de JS/CSS/JSON entregado por Render.
+    gzip on;
+    gzip_comp_level 5;
+    gzip_min_length 512;
+    gzip_vary on;
+    gzip_proxied any;
+    gzip_types text/plain text/css text/javascript application/javascript application/json image/svg+xml;
+
     location /api/ {
         proxy_pass ${API_UPSTREAM};
         proxy_http_version 1.1;

@@ -1,0 +1,50 @@
+[33mBoth esbuild and oxc options were set. oxc options will be used and esbuild options will be ignored.[39m The following esbuild options were set: `{ jsx: 'automatic' }`
+
+ RUN  v5.1.0 D:/HeroesDelCorazon/frontend
+      Coverage enabled with v8
+
+
+ Test Files  11 passed (11)
+      Tests  95 passed (95)
+   Start at  13:27:13
+   Duration  8.89s (environment 63%, setup 19%, tests 7%, worker 7%, import 4%)
+
+[34m % [39m[2mCoverage report from [22m[33mv8[39m
+-------------------|---------|----------|---------|---------|-------------------
+File               | % Stmts | % Branch | % Funcs | % Lines | Uncovered Line #s 
+-------------------|---------|----------|---------|---------|-------------------
+All files          |   32.98 |    29.64 |   25.76 |   34.74 |                   
+ src               |   68.18 |       50 |   78.26 |   57.14 |                   
+  App.jsx          |   81.08 |       70 |   78.26 |   76.19 | 23,28-31,51-52    
+  main.jsx         |       0 |        0 |     100 |       0 | 9-21              
+ src/components    |   39.34 |    38.01 |   23.52 |   39.62 |                   
+  ...ramFields.jsx |   26.66 |    58.97 |   16.66 |   26.66 | 10-11,49-128,150  
+  Layout.jsx       |   77.77 |     62.5 |   42.85 |      75 | 52-116,128        
+  ScoreTable.jsx   |    8.33 |        0 |       0 |   10.52 | 14-16,27-93       
+ src/components/ui |     100 |     97.7 |     100 |     100 |                   
+  ...eteSelect.jsx |     100 |    97.95 |     100 |     100 | 113               
+  ...ionSelect.jsx |     100 |       95 |     100 |     100 | 33                
+ src/context       |     100 |    80.76 |     100 |     100 |                   
+  AuthContext.jsx  |     100 |    80.76 |     100 |     100 | 23,43,111-117     
+ src/lib           |   52.27 |    42.51 |   47.12 |   54.43 |                   
+  api.js           |   96.87 |     97.1 |   85.71 |      98 | 22                
+  realtime.js      |   47.05 |    26.92 |      40 |   54.54 | ...42,46-50,57-65 
+  ...ionProgram.js |    3.27 |        0 |       0 |    4.16 | 12-187            
+ src/pages         |     9.9 |    11.87 |    5.21 |   11.39 |                   
+  ...boardPage.jsx |       0 |        0 |       0 |       0 | 16-219            
+  ...ationPage.jsx |   49.03 |    58.76 |   23.07 |   56.47 | ...97,204,221-253 
+  ...sListPage.jsx |       0 |        0 |       0 |       0 | 15-395            
+  ...reatePage.jsx |       0 |        0 |       0 |       0 | 13-503            
+  ...ogramPage.jsx |       0 |        0 |       0 |       0 | 8-64              
+  ResultsPage.jsx  |       0 |        0 |       0 |       0 | 18-324            
+  ReviewPage.jsx   |       0 |        0 |       0 |       0 | 13-158            
+  ...mportPage.jsx |       0 |        0 |       0 |       0 | 15-150            
+  ...AdminPage.jsx |       0 |        0 |       0 |       0 | 6-104             
+-------------------|---------|----------|---------|---------|-------------------
+
+=============================== Coverage summary ===============================
+Statements   : 32.98% ( 469/1422 )
+Branches     : 29.64% ( 346/1167 )
+Functions    : 25.76% ( 134/520 )
+Lines        : 34.74% ( 394/1134 )
+================================================================================
