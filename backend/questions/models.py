@@ -71,6 +71,16 @@ class Evaluation(models.Model):
     # Set when the boss reprograms it (new closing date, areas, people or reopening): a new round starts
     # and the collaborators can score again, even in the same month.
     program_started_at = models.DateTimeField(_("Program started"), null=True, blank=True)
+    # Base form this evaluation was programmed from (None = an original form created by the boss).
+    # Lets "Programar evaluación" list only the originals instead of every programmed copy.
+    source = models.ForeignKey(
+        "self",
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="programs",
+        verbose_name=_("Programmed from"),
+    )
     created_at = models.DateTimeField(_("Created"), auto_now_add=True)
 
     objects = EvaluationQuerySet.as_manager()

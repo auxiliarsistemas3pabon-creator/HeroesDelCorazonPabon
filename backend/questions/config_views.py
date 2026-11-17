@@ -188,6 +188,9 @@ class EvaluationsView(AuditLogMixin, APIView):
             # ?created_by=me: solo los formularios propios (el superadmin no se restringe), los únicos que se pueden programar.
             if request.query_params.get("created_by") == "me":
                 evaluations = evaluations.filter(**owned_by(request.user))
+            # ?base=1: solo los formularios originales (no las copias programadas), para "Programar evaluación".
+            if request.query_params.get("base") == "1":
+                evaluations = evaluations.filter(source__isnull=True)
             evaluations = evaluations.distinct()
         data = [_evaluation_data(e) for e in evaluations]
         if request.user.role not in MANAGER_ROLES:
@@ -429,6 +432,8 @@ class EvaluationProgramCreateView(AuditLogMixin, APIView):
 
         # The copy is a new, independent evaluation (answers are NOT copied); codes get new unique slugs below.
         programmed = Evaluation.objects.create(
+            # Copies of a copy still point to the original form, so the base list never shows duplicates.
+            source=source.source or source,
             name=source.name,
             rating_type=source.rating_type,
             created_by=request.user,

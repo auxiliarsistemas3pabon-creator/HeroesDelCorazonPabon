@@ -20,7 +20,8 @@ export function FormProgramPage() {
 
   // Evaluaciones existentes + personal candidato (para elegir personas a evaluar al programar).
   useEffect(() => {
-    Promise.all([api(`${EVALUATIONS}?created_by=me`), api('/users/staff-candidates/')])
+    // base=1: solo las evaluaciones creadas (originales); las copias programadas no se listan para no duplicarlas.
+    Promise.all([api(`${EVALUATIONS}?created_by=me&base=1`), api('/users/staff-candidates/')])
       .then(([list, candidates]) => {
         setEvaluations(list)
         setStaff(candidates)
@@ -31,13 +32,13 @@ export function FormProgramPage() {
   // `selected` es string ('' = ninguna) porque lo maneja AutocompleteSelect; por eso se compara con String(id).
   const chosen = evaluations?.find((evaluation) => String(evaluation.id) === selected) ?? null
 
-  // Al programar se crea una evaluación NUEVA (id distinto), así que se agrega a la lista en vez de reemplazar.
+  // Al programar se crea una copia NUEVA; no se agrega a esta lista porque aquí solo se muestran las originales
+  // (la copia aparece en "Lista de evaluaciones").
   function handleSaved(updated) {
     // Formulario limpio para programar otra: se deja de seleccionar la evaluación y se remonta el editor.
     setNotice(`Nueva evaluación programada: «${updated.name}».`)
     setSelected('')
     setFormVersion((version) => version + 1)
-    setEvaluations((current) => [...current, updated])
   }
 
   return (
