@@ -19,7 +19,7 @@ export function EvaluationProgramFields({ program, disabled = false, createNew =
     availableAreas,
     value, setValue,
     randomSelection, setRandomSelection,
-    closeDate, setCloseDate,
+    closeDate, setCloseDate, minCloseDate,
     selectedAreas, toggleArea, selectAllAreas,
     scopedStaff, scopedEvaluators, allAreasSelected,
     evaluatorIds, setAllEvaluators, toggleEvaluator, evaluatorsInvalid,
@@ -102,6 +102,7 @@ export function EvaluationProgramFields({ program, disabled = false, createNew =
           className={FIELD}
           type="date"
           value={closeDate}
+          min={minCloseDate}
           disabled={fieldsDisabled}
           onChange={(event) => setCloseDate(event.target.value)}
           required

@@ -117,6 +117,9 @@ def _clean_evaluator_ids(raw, areas):
     return ids
 
 
+PAST_CLOSING_DATE = "La fecha de cierre debe ser igual o posterior a la fecha actual."
+
+
 def _bad(field, message):
     return Response({field: [message]}, status=status.HTTP_400_BAD_REQUEST)
 
@@ -289,6 +292,9 @@ class EvaluationDetailView(AuditLogMixin, APIView):
             closes_on = parse_date(raw_closes_on) if isinstance(raw_closes_on, str) else None
             if raw_closes_on is not None and closes_on is None:
                 return _bad("closes_on", _("Enter a valid closing date."))
+            # Solo se valida si la fecha cambia: una evaluación ya cerrada puede editarse sin tocar su fecha.
+            if closes_on is not None and closes_on != evaluation.closes_on and closes_on < timezone.localdate():
+                return _bad("closes_on", PAST_CLOSING_DATE)
             reprogrammed = reprogrammed or closes_on != evaluation.closes_on
             evaluation.closes_on = closes_on
         if "areas" in request.data:
@@ -383,6 +389,8 @@ class EvaluationProgramCreateView(AuditLogMixin, APIView):
         closes_on = parse_date(raw_closes_on) if isinstance(raw_closes_on, str) else None
         if closes_on is None:
             return _bad("closes_on", _("Enter a valid closing date."))
+        if closes_on < timezone.localdate():
+            return _bad("closes_on", PAST_CLOSING_DATE)
 
         areas = request.data.get("areas")
         if areas is not None and (

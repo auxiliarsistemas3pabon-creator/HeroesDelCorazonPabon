@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import { api, errorMessage } from './api'
+import { today } from './dates'
 
 const EVALUATIONS = '/questions/evaluations/'
 const SETTINGS = '/questions/settings/'
@@ -121,6 +122,10 @@ export function useEvaluationProgram({ evaluation, staff, onSaved, createNew = f
 
   // Crear: POST a /programs/ (copia nueva de la evaluación). Editar: PATCH de fecha/áreas/modo y PUT aparte
   // del límite mensual (vive en otro recurso), cada uno solo si cambió.
+  // No se programa con fecha pasada: aplica al crear y al cambiar la fecha (una programación ya cerrada
+  // puede editarse en otros campos sin obligar a tocar su fecha).
+  const minCloseDate = createNew || closeDate !== savedCloseDate ? today() : undefined
+
   async function submit(event) {
     event?.preventDefault?.()
     if (!evaluationId || !validLimit) {
@@ -129,6 +134,10 @@ export function useEvaluationProgram({ evaluation, staff, onSaved, createNew = f
     }
     if (!closeDate) {
       setError('Selecciona la fecha de cierre.')
+      return
+    }
+    if (minCloseDate && closeDate < minCloseDate) {
+      setError('La fecha de cierre debe ser igual o posterior a la fecha actual.')
       return
     }
     if (evaluatorsInvalid) {
@@ -188,7 +197,7 @@ export function useEvaluationProgram({ evaluation, staff, onSaved, createNew = f
     availableAreas,
     value, setValue,
     randomSelection, setRandomSelection,
-    closeDate, setCloseDate,
+    closeDate, setCloseDate, minCloseDate,
     selectedAreas, toggleArea, selectAllAreas,
     scopedStaff, scopedEvaluators, allAreasSelected,
     evaluatorIds, setAllEvaluators, toggleEvaluator, evaluatorsInvalid,
