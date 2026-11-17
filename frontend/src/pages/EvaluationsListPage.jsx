@@ -67,7 +67,7 @@ function EvaluationDetails({ evaluation }) {
         if (current) setError(errorMessage(e))
       })
     return () => { current = false }
-  }, [evaluation.id])
+  }, [])
 
   if (error) return <div role="alert" className={ALERT_ERROR}>{error}</div>
   if (!details) return <p className="p-4 text-sm text-app-muted">Cargando categorías, preguntas y respuestas...</p>
@@ -179,7 +179,6 @@ function Row({ evaluation, onSave, busy, expanded, onToggle, onEditProgram }) {
       <tr className="align-top">
         <td className="break-words px-2 py-3 font-semibold text-app sm:px-3">
           {evaluation.name}
-          <span className="block text-xs font-normal text-app-muted">ID: {evaluation.id}</span>
         </td>
         <td className="px-1 py-3 text-center sm:px-3">{evaluation.categories}</td>
         <td className="px-1 py-3 text-center sm:px-3">{evaluation.criteria}</td>
