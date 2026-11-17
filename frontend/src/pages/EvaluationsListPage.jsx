@@ -184,11 +184,17 @@ function Row({ evaluation, onSave, busy, expanded, onToggle, onEditProgram }) {
         <td className="px-1 py-3 text-center sm:px-3">{evaluation.evaluations_pending ?? 0}</td>
         <td className="px-1 py-3 text-center sm:px-3">{evaluation.evaluations_done ?? 0}</td>
         <td className="break-words px-2 py-3 text-center align-middle text-app-muted sm:px-3">
-          {evaluation.pending_evaluators?.length
-            ? evaluation.pending_evaluators.map((pending) => (
-              <span key={pending.id} className="block">{pending.name}</span>
-            ))
-            : '—'}
+          {evaluation.pending_evaluators?.length ? (
+            <>
+              {/* Con muchos pendientes la lista se desplaza dentro de la celda en vez de estirar toda la fila. */}
+              <small className="mb-1 block text-xs font-medium text-app">{evaluation.pending_evaluators.length} pendiente(s)</small>
+              <ul className="max-h-40 overflow-y-auto pr-1 text-left leading-snug">
+                {evaluation.pending_evaluators.map((pending) => (
+                  <li key={pending.id} className="break-words py-0.5">{pending.name}</li>
+                ))}
+              </ul>
+            </>
+          ) : '—'}
         </td>
         <td className="whitespace-nowrap px-2 py-3 text-center align-middle sm:px-3">
           {evaluation.closes_on ? formatDay(evaluation.closes_on) : 'Sin fecha'}
@@ -350,13 +356,13 @@ export function EvaluationsListPage() {
         <>
           <Card padding="sm">
             <div className="overflow-x-auto">
-              <table className="w-full min-w-[1450px] table-fixed text-sm">
+              <table className="w-full min-w-[1550px] table-fixed text-sm">
                 <colgroup>
                   <col className="w-[250px]" />
-                  <col className="w-[110px]" />
-                  <col className="w-[110px]" />
-                  <col className="w-[110px]" />
-                  <col className="w-[200px]" />
+                  <col className="w-[130px]" />
+                  <col className="w-[130px]" />
+                  <col className="w-[130px]" />
+                  <col className="w-[240px]" />
                   <col className="w-[360px]" />
                   <col className="w-[120px]" />
                   <col className="w-[230px]" />
@@ -364,10 +370,11 @@ export function EvaluationsListPage() {
                 <thead>
                   <tr className="border-b border-app">
                     <th className={`${TH} whitespace-nowrap px-2 sm:px-3`}>Evaluación</th>
-                    <th className={`${TH} px-1 sm:px-2`} style={{ textAlign: 'center' }}>Total de evaluaciones</th>
-                    <th className={`${TH} px-1 sm:px-2`} style={{ textAlign: 'center' }}>Evaluaciones programadas</th>
-                    <th className={`${TH} px-1 sm:px-2`} style={{ textAlign: 'center' }}>Evaluaciones realizadas</th>
-                    <th className={`${TH} whitespace-nowrap px-2 sm:px-3`} style={{ textAlign: 'center' }}>Pendiente por evaluación</th>
+                    {/* !whitespace-normal: estos títulos son largos y deben partirse en líneas en vez de montarse entre columnas. */}
+                    <th className={`${TH} !whitespace-normal break-words px-1 leading-tight sm:px-2`} style={{ textAlign: 'center' }}>Total de evaluaciones</th>
+                    <th className={`${TH} !whitespace-normal break-words px-1 leading-tight sm:px-2`} style={{ textAlign: 'center' }}>Evaluaciones programadas</th>
+                    <th className={`${TH} !whitespace-normal break-words px-1 leading-tight sm:px-2`} style={{ textAlign: 'center' }}>Evaluaciones realizadas</th>
+                    <th className={`${TH} !whitespace-normal break-words px-2 leading-tight sm:px-3`} style={{ textAlign: 'center' }}>Pendiente por evaluación</th>
                     <th className={`${TH} whitespace-nowrap px-2 sm:px-3`} style={{ textAlign: 'center' }}>Fecha de cierre</th>
                     <th className={`${TH} whitespace-nowrap px-1 sm:px-2`} style={{ textAlign: 'center' }}>Estado</th>
                     <th className={`${TH} whitespace-nowrap px-1 sm:px-2`} style={{ textAlign: 'center' }}>Acciones</th>
