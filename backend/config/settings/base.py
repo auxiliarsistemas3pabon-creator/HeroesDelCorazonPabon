@@ -141,6 +141,12 @@ elif DATABASE_ENGINE in {"postgres", "postgresql"}:
 else:
     raise ValueError("DATABASE_ENGINE must be 'mssql' or 'postgresql'.")
 
+# Conexiones persistentes a PostgreSQL: evita abrir una conexion nueva por peticion
+# (reduce la latencia). El health-check descarta conexiones cerradas por el servidor.
+if DATABASES["default"]["ENGINE"].endswith("postgresql"):
+    DATABASES["default"]["CONN_MAX_AGE"] = env.int("DB_CONN_MAX_AGE", default=60)
+    DATABASES["default"]["CONN_HEALTH_CHECKS"] = True
+
 # Optional read source used once by the explicit PostgreSQL-to-SQL Server transfer command.
 if os.getenv("SOURCE_POSTGRES_DB"):
     DATABASES["source_postgres"] = {

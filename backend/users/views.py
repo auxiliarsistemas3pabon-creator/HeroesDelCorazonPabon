@@ -114,11 +114,14 @@ class LoginView(AuditLogMixin, APIView):
         # password against Django's normal backend first so a stale lockout
         # cannot reject the account owner; invalid credentials still pass
         # through Axes below and continue to count toward brute-force limits.
-        user = ModelBackend().authenticate(request=request, username=username, password=password)
-        if user is not None and user.is_active:
-            reset_login_attempts(username=user.username)
-        else:
-            user = None
+        # Un usuario inexistente no necesita la primera verificacion (evita un hash de clave extra).
+        registered = User.objects.filter(username=username).exists()
+        user = None
+        if registered:
+            candidate = ModelBackend().authenticate(request=request, username=username, password=password)
+            if candidate is not None and candidate.is_active:
+                reset_login_attempts(username=candidate.username)
+                user = candidate
         try:
             if user is None:
                 user = authenticate(request=request, username=username, password=password)
@@ -129,7 +132,6 @@ class LoginView(AuditLogMixin, APIView):
                 status=status.HTTP_403_FORBIDDEN,
             )
         if user is None or not user.is_active:
-            registered = User.objects.filter(username=username).exists()
             log_unauthorized(request, "wrong_password" if registered else "unknown_user")
             if not registered:
                 return Response(

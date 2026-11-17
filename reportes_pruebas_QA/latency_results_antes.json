@@ -1,0 +1,157 @@
+{
+  "base_url": "http://localhost:8011",
+  "sequential": {
+    "POST /auth/login/ (correcto)": {
+      "n": 15,
+      "min_ms": 335.4,
+      "avg_ms": 408.2,
+      "p50_ms": 392.8,
+      "p95_ms": 539.6,
+      "p99_ms": 539.6,
+      "max_ms": 539.6,
+      "status": {
+        "200": 15
+      }
+    },
+    "POST /auth/login/ (usuario inexistente)": {
+      "n": 15,
+      "min_ms": 345.0,
+      "avg_ms": 444.0,
+      "p50_ms": 407.7,
+      "p95_ms": 699.4,
+      "p99_ms": 699.4,
+      "max_ms": 699.4,
+      "status": {
+        "401": 15
+      }
+    },
+    "POST /auth/login/ (SQLi bloqueado)": {
+      "n": 15,
+      "min_ms": 6.5,
+      "avg_ms": 10.8,
+      "p50_ms": 9.6,
+      "p95_ms": 16.7,
+      "p99_ms": 16.7,
+      "max_ms": 16.7,
+      "status": {
+        "403": 15
+      }
+    },
+    "GET /api/v1/auth/me/": {
+      "n": 30,
+      "min_ms": 27.0,
+      "avg_ms": 36.4,
+      "p50_ms": 34.2,
+      "p95_ms": 56.9,
+      "p99_ms": 71.9,
+      "max_ms": 71.9,
+      "status": {
+        "200": 30
+      }
+    },
+    "GET /api/v1/auth/csrf/": {
+      "n": 30,
+      "min_ms": 8.8,
+      "avg_ms": 11.8,
+      "p50_ms": 10.8,
+      "p95_ms": 19.0,
+      "p99_ms": 27.5,
+      "max_ms": 27.5,
+      "status": {
+        "200": 30
+      }
+    },
+    "GET /api/v1/users/areas/": {
+      "n": 30,
+      "min_ms": 21.7,
+      "avg_ms": 29.7,
+      "p50_ms": 30.1,
+      "p95_ms": 44.4,
+      "p99_ms": 46.2,
+      "max_ms": 46.2,
+      "status": {
+        "200": 30
+      }
+    },
+    "GET /api/v1/users/collaborators/": {
+      "n": 30,
+      "min_ms": 29.9,
+      "avg_ms": 46.6,
+      "p50_ms": 42.1,
+      "p95_ms": 64.3,
+      "p99_ms": 127.3,
+      "max_ms": 127.3,
+      "status": {
+        "200": 30
+      }
+    },
+    "GET /api/v1/users/staff-candidates/": {
+      "n": 30,
+      "min_ms": 23.8,
+      "avg_ms": 33.0,
+      "p50_ms": 30.8,
+      "p95_ms": 51.6,
+      "p99_ms": 64.0,
+      "max_ms": 64.0,
+      "status": {
+        "403": 30
+      }
+    },
+    "GET /api/v1/users/evaluators/": {
+      "n": 30,
+      "min_ms": 24.6,
+      "avg_ms": 34.6,
+      "p50_ms": 35.2,
+      "p95_ms": 47.8,
+      "p99_ms": 47.9,
+      "max_ms": 47.9,
+      "status": {
+        "403": 30
+      }
+    },
+    "GET /api/v1/questions/evaluations/": {
+      "n": 30,
+      "min_ms": 29.1,
+      "avg_ms": 35.7,
+      "p50_ms": 33.7,
+      "p95_ms": 53.0,
+      "p99_ms": 58.5,
+      "max_ms": 58.5,
+      "status": {
+        "200": 30
+      }
+    }
+  },
+  "load": {
+    "GET /auth/me/ x5 sesiones concurrentes": {
+      "n": 300,
+      "min_ms": 69.3,
+      "avg_ms": 174.1,
+      "p50_ms": 160.2,
+      "p95_ms": 253.1,
+      "p99_ms": 583.3,
+      "max_ms": 625.9,
+      "status": {
+        "200": 300
+      },
+      "workers": 5,
+      "elapsed_s": 10.57,
+      "throughput_rps": 28.4
+    },
+    "GET /users/collaborators/ x5 sesiones concurrentes": {
+      "n": 300,
+      "min_ms": 56.6,
+      "avg_ms": 125.1,
+      "p50_ms": 120.2,
+      "p95_ms": 207.4,
+      "p99_ms": 250.7,
+      "max_ms": 272.0,
+      "status": {
+        "200": 300
+      },
+      "workers": 5,
+      "elapsed_s": 7.59,
+      "throughput_rps": 39.5
+    }
+  }
+}

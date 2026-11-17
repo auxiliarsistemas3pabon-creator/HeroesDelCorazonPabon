@@ -26,6 +26,8 @@ export default defineConfig(({ mode }) => {
       },
     },
     test: {
+      // vitest 5.1 + Node 24 no inicializa el runner en los pools forks/threads de este entorno.
+      pool: 'vmThreads',
       environment: 'jsdom',
       globals: true,
       setupFiles: './src/test/setup.js',

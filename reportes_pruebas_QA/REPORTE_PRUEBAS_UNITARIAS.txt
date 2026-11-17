@@ -1,0 +1,77 @@
+REPORTE DE PRUEBAS UNITARIAS Y COBERTURA - Heroes del Corazon
+Fecha: 2026-11-13
+
+RESUMEN HONESTO: NO se alcanzo el 100 % de lineas cubiertas.
+  Backend  (Django): 124 pruebas, todas OK. Cobertura de lineas 84 %   (antes 80 %).
+  Frontend (Vitest):  95 pruebas, todas OK. Cobertura de lineas 34.7 % (antes 12.1 %).
+Lo que falta se detalla al final. No se afirma cobertura total porque no es cierta.
+
+======================================================================
+1. BACKEND (manage.py test users questions.tests, medido con coverage)
+======================================================================
+Comando:
+  docker compose exec -e DJANGO_SETTINGS_MODULE=config.settings.test backend
+      coverage run manage.py test users questions.tests --noinput
+(config/settings/test.py usa un hasher rapido solo para pruebas; la suite paso de ~20 min a ~45 s.)
+
+Linea base antes de tocar nada: 7 pruebas ya fallaban (por funciones eliminadas en commits previos
+del proyecto): ruta password-change, recuperacion de clave por correo (3), clave temporal obligatoria,
+importacion con password_change_required y test_refresh_and_logout.
+Tratamiento:
+ - test_refresh_and_logout revelo un BUG REAL: tras el logout, una cookie de acceso vacia devolvia 401
+   en vez de "sin sesion". Corregido en common/authentication.py (cookie vacia = anonimo).
+ - Las pruebas de funciones eliminadas a proposito (recuperacion de clave, cambio de clave temporal)
+   se retiraron o se reorientaron a la ruta vigente.
+ - 2 pruebas existentes se actualizaron por cambios INTENCIONALES: SQLi en el usuario ahora devuelve
+   403 (antes 401) y el mensaje de clave incorrecta ahora es "Acceso no autorizado.".
+
+Pruebas nuevas: users/test_security.py (20) y users/test_coverage_extra.py (aprox. 28):
+ - Detector de SQLi/XSS: 12 ataques detectados; textos legitimos permitidos.
+ - Login: usuario inexistente -> "Usuario no encontrado" + log "PERMISO NO AUTORIZADO";
+   clave incorrecta -> "Acceso no autorizado"; usuario inactivo; SQLi/script en usuario (403);
+   SQLi en query string (403); clave con simbolos NO se bloquea; campos largos o faltantes; modo privado.
+ - Dispositivos: usuario registrado en dispositivo nuevo entra y se registra; reuso del dispositivo;
+   segundo navegador; cookies robadas sin cookie de dispositivo (401); dispositivo revocado;
+   refresh conserva el vinculo; tope de 5 dispositivos; sesion legada sin claim; el bloqueo de Axes no
+   impide entrar al dueño; cookie de dispositivo de otro usuario; refresh desde otro navegador.
+ - Middleware: rutas no-API, cuerpos no JSON, JSON invalido, cuerpo grande, payloads anidados, claves,
+   profundidad limitada, contrasenas no inspeccionadas.
+ - Administracion de usuarios: roles, desactivar, proteger al ultimo superadmin, restablecer clave,
+   clave debil, directorios por area/rol, registro y validaciones, modelos y create_superuser.
+
+Cobertura por archivo: ver backend_coverage_raw.txt (salida completa de "coverage report -m").
+Al 100 %: users/devices.py, users/admin.py, users/urls.py, audit/mixins.py y otros.
+users/views.py 99 %, common/security.py 93 %.
+
+Huecos del backend (NO cubiertos):
+ - questions/config_views.py 81 %, questions/staff_import.py 59 %, questions/limits.py 68 %.
+ - realtime/auth.py, consumers.py y routing.py: 0 % (WebSocket; requiere channels.testing).
+ - users/serializers.py 88 % (PasswordChangeSerializer ya no se usa en ninguna ruta).
+
+======================================================================
+2. FRONTEND (npx vitest run --coverage)
+======================================================================
+Problema del entorno resuelto: vitest 5.1 con Node 24 no inicializaba el runner con los pools por
+defecto (error "Cannot read properties of undefined (reading 'config')", incluso en una prueba trivial).
+Se fijo pool: 'vmThreads' en vite.config.js y con eso las pruebas corren.
+
+Linea base: 23 pruebas con 2 fallando (App.test.jsx probaba la pagina de cambio de clave, eliminada a
+proposito por el proyecto; se retiraron esas 2 pruebas). Cobertura de lineas 12.1 %.
+
+Pruebas nuevas (72): utilidades (fechas, media, escalas), componentes UI (Badge, Card, PasswordInput,
+DateRangeFilter, AutocompleteSelect con teclado/raton/clic fuera, EvaluationSelect), api.js
+(errorMessage, CSRF, refresh, FormData, errores), privateMode.js (Chromium, Firefox, Safari y casos
+limite), AuthContext (restaurar sesion, login, logout, tiempo real, avisos), LoginPage (redireccion por
+rol, usuario no encontrado, acceso no autorizado, bloqueo en incognito) y useEvaluationForms.
+
+Cobertura actual (ver frontend_coverage_raw.txt): context/ 100 %, api.js 98 %.
+Sin cobertura (0 %): DashboardPage, EvaluationsListPage, FormCreatePage, FormProgramPage, ResultsPage,
+ReviewPage, StaffImportPage, UsersAdminPage, useEvaluationProgram, ScoreTable, main.jsx.
+Son unas 2000 lineas de paginas grandes que necesitan pruebas con datos simulados.
+
+======================================================================
+3. PARA LLEGAR AL 100 %
+======================================================================
+Backend: pruebas de questions/config_views.py, staff_import.py, limits.py y de realtime con
+channels.testing.WebsocketCommunicator. Frontend: una suite por pagina con api mockeado.
+Es trabajo adicional de varias horas; no se hizo en esta entrega.
