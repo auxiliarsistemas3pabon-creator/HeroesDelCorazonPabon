@@ -180,6 +180,14 @@ function Row({ evaluation, onSave, busy, expanded, onToggle, onEditProgram }) {
         <td className="break-words px-2 py-3 font-semibold text-app sm:px-3">
           {evaluation.name}
         </td>
+        {/* areas: null = todas las áreas; si son muchas, la lista se desplaza dentro de la celda. */}
+        <td className="break-words px-2 py-3 text-app-muted sm:px-3">
+          {evaluation.areas === null || evaluation.areas === undefined ? 'Todas las áreas' : evaluation.areas.length ? (
+            <ul className="max-h-40 overflow-y-auto pr-1 leading-snug">
+              {evaluation.areas.map((area) => <li key={area} className="py-0.5">{area}</li>)}
+            </ul>
+          ) : '—'}
+        </td>
         <td className="px-1 py-3 text-center sm:px-3">{evaluation.evaluations_total ?? 0}</td>
         <td className="px-1 py-3 text-center sm:px-3">{evaluation.evaluations_pending ?? 0}</td>
         <td className="px-1 py-3 text-center sm:px-3">{evaluation.evaluations_done ?? 0}</td>
@@ -356,9 +364,10 @@ export function EvaluationsListPage() {
         <>
           <Card padding="sm">
             <div className="overflow-x-auto">
-              <table className="w-full min-w-[1550px] table-fixed text-sm">
+              <table className="w-full min-w-[1730px] table-fixed text-sm">
                 <colgroup>
                   <col className="w-[250px]" />
+                  <col className="w-[180px]" />
                   <col className="w-[130px]" />
                   <col className="w-[130px]" />
                   <col className="w-[130px]" />
@@ -370,6 +379,7 @@ export function EvaluationsListPage() {
                 <thead>
                   <tr className="border-b border-app">
                     <th className={`${TH} whitespace-nowrap px-2 sm:px-3`}>Evaluación</th>
+                    <th className={`${TH} whitespace-nowrap px-2 sm:px-3`}>Área</th>
                     {/* !whitespace-normal: estos títulos son largos y deben partirse en líneas en vez de montarse entre columnas. */}
                     <th className={`${TH} !whitespace-normal break-words px-1 leading-tight sm:px-2`} style={{ textAlign: 'center' }}>Total de evaluaciones</th>
                     <th className={`${TH} !whitespace-normal break-words px-1 leading-tight sm:px-2`} style={{ textAlign: 'center' }}>Evaluaciones programadas</th>
