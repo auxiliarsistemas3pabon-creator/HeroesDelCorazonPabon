@@ -42,12 +42,15 @@ class EvaluationProgramCreateTests(APITestCase):
         )
 
     def test_reusing_a_form_creates_independent_programs(self):
-        from datetime import date
+        from datetime import date, timedelta
 
+        # Fechas relativas a hoy: con fechas fijas la primera programación termina cerrada y ya no acepta respuestas.
+        first_close = date.today() + timedelta(days=30)
+        second_close = date.today() + timedelta(days=60)
         emergency_evaluator = create_user("program.emergency.evaluator", User.Role.COLLABORATOR, area="Emergency")
         cardiology_evaluator = create_user("program.cardiology.evaluator", User.Role.COLLABORATOR, area="Cardiology")
-        first = self.program("2026-11-15", "Emergency", self.emergency, 2)
-        second = self.program("2026-12-20", "Cardiology", self.cardiology, 5)
+        first = self.program(first_close.isoformat(), "Emergency", self.emergency, 2)
+        second = self.program(second_close.isoformat(), "Cardiology", self.cardiology, 5)
 
         self.assertEqual((first.status_code, second.status_code), (201, 201))
         first_id, second_id = first.data["id"], second.data["id"]
@@ -59,13 +62,13 @@ class EvaluationProgramCreateTests(APITestCase):
             (first_evaluation.name, first_evaluation.rating_type, first_evaluation.areas,
              first_evaluation.personal_ids, first_evaluation.closes_on, first_evaluation.monthly_limit),
             ("Desempeño", Evaluation.RatingType.DESCRIPTIVE, ["Emergency"],
-             [self.emergency.pk], date(2026, 11, 15), 2),
+             [self.emergency.pk], first_close, 2),
         )
         self.assertEqual(
             (second_evaluation.name, second_evaluation.areas, second_evaluation.personal_ids,
              second_evaluation.closes_on, second_evaluation.monthly_limit),
             ("Desempeño", ["Cardiology"], [self.cardiology.pk],
-             date(2026, 12, 20), 5),
+             second_close, 5),
         )
 
         first_category = first_evaluation.categories.get()
@@ -100,6 +103,31 @@ class EvaluationProgramCreateTests(APITestCase):
         self.assertIsNone(self.source.areas)
         self.assertEqual(self.source.categories.count(), 1)
         self.assertEqual(Evaluation.objects.filter(name="Desempeño").count(), 3)
+
+    def test_program_list_shows_only_original_forms(self):
+        """"Programar evaluación" (?base=1) lists each created form once, never its programmed copies."""
+        from datetime import date, timedelta
+
+        close = (date.today() + timedelta(days=30)).isoformat()
+        first = self.program(close, "Emergency", self.emergency, 2)
+        self.assertEqual(first.status_code, 201)
+        # Programming from a copy still links to the original form.
+        second = self.client.post(
+            f"/api/v1/questions/evaluations/{first.data['id']}/programs/",
+            {"closes_on": close, "areas": ["Emergency"], "personal_ids": [self.emergency.pk], "monthly_limit": 2},
+            format="json",
+        )
+        self.assertEqual(second.status_code, 201)
+        self.assertEqual(
+            set(Evaluation.objects.filter(source=self.source).values_list("pk", flat=True)),
+            {first.data["id"], second.data["id"]},
+        )
+
+        base = self.client.get("/api/v1/questions/evaluations/?created_by=me&base=1")
+        self.assertEqual([item["id"] for item in base.data], [self.source.pk])
+        # Without ?base=1 the list keeps returning every evaluation (Lista de evaluaciones is unchanged).
+        everything = self.client.get("/api/v1/questions/evaluations/?created_by=me")
+        self.assertEqual(len(everything.data), 3)
 
     def test_cannot_program_another_boss_form_or_assign_people_outside_areas(self):
         other_boss = create_user("other.program.boss", User.Role.BOSS)

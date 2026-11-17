@@ -64,7 +64,7 @@ export function FormProgramPage() {
                 { value: '', label: 'Selecciona una evaluación' },
                 ...evaluations.map((evaluation) => ({
                   value: String(evaluation.id),
-                  label: `${evaluation.name} (Cierra ${evaluation.closes_on})`,
+                  label: evaluation.name,
                 })),
               ]}
             />

@@ -209,11 +209,11 @@ export function EvaluationPage() {
     )
   }
 
-  // Con una sola evaluación abierta se salta el selector; `onBack` solo se ofrece si hay más de una.
-  // El `key` reinicia todo el estado del formulario al cambiar de evaluación.
-  const current = evaluations.length === 1 ? evaluations[0] : evaluations.find((e) => e.id === chosen)
+  // Siempre se muestra el selector de tarjetas (aunque haya una sola evaluación), para que el colaborador vea
+  // su estado (cierre, completada, pendientes) antes de entrar. El `key` reinicia el formulario al cambiar de evaluación.
+  const current = evaluations.find((e) => e.id === chosen)
   if (current) {
-    return <EvaluationForm key={current.id} evaluation={current} onBack={evaluations.length > 1 ? () => setChosen(null) : null} />
+    return <EvaluationForm key={current.id} evaluation={current} onBack={() => setChosen(null)} />
   }
 
   // Las completadas (sin cupo restante) van al final; el orden del resto se conserva.
@@ -226,7 +226,9 @@ export function EvaluationPage() {
     <div className="space-y-6">
       <div>
         <h1 className={PAGE_TITLE}>ESCALA DE VALORACIÓN</h1>
-        <p className={PAGE_SUBTITLE}>Hay varias evaluaciones abiertas. Elige la que vas a responder.</p>
+        <p className={PAGE_SUBTITLE}>
+          {evaluations.length === 1 ? 'Elige la evaluación que vas a responder.' : 'Hay varias evaluaciones abiertas. Elige la que vas a responder.'}
+        </p>
       </div>
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
         {visible.map((evaluation) => (

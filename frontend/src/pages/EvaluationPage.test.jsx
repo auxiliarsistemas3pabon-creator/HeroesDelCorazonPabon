@@ -26,8 +26,16 @@ describe('EvaluationPage', () => {
     })
   })
 
+  it('con una sola evaluación muestra primero la tarjeta y no entra directo al formulario', async () => {
+    render(<EvaluationPage />)
+    expect(await screen.findByRole('button', { name: /Evaluación de prueba/ })).toBeInTheDocument()
+    expect(screen.getByText('30 por evaluar')).toBeInTheDocument()
+    expect(screen.queryByText('Persona1 Prueba')).not.toBeInTheDocument()
+  })
+
   it('muestra 23 colaboradores por página y conserva la navegación al resto', async () => {
     render(<EvaluationPage />)
+    fireEvent.click(await screen.findByRole('button', { name: /Evaluación de prueba/ }))
     await screen.findByText('Persona23 Prueba')
     expect(screen.queryByText('Persona24 Prueba')).not.toBeInTheDocument()
     expect(screen.getByText('Página 1 de 2')).toBeInTheDocument()
