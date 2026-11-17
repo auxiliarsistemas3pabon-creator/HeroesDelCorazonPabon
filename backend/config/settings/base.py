@@ -224,11 +224,21 @@ if _render_environment and _channels_redis_url:
 
     if urlparse(_channels_redis_url).hostname in {"redis", "localhost", "127.0.0.1"}:
         _channels_redis_url = None
+# redis-py >= 6 usa socket_timeout=5s por defecto, igual a la espera bloqueante (BZPOPMIN) de channels_redis:
+# la lectura se cortaba antes de que Redis respondiera y cada WebSocket caía cada ~5 s con
+# "Timeout reading from redis". Se deja margen sobre esa espera y se vigila la conexión con keepalive.
+CHANNELS_REDIS_CONNECTION = {
+    "socket_timeout": 15,
+    "socket_connect_timeout": 5,
+    "socket_keepalive": True,
+    "health_check_interval": 30,
+    "retry_on_timeout": True,
+}
 if _channels_redis_url:
     CHANNEL_LAYERS = {
         "default": {
             "BACKEND": "channels_redis.core.RedisChannelLayer",
-            "CONFIG": {"hosts": [_channels_redis_url]},
+            "CONFIG": {"hosts": [{"address": _channels_redis_url, **CHANNELS_REDIS_CONNECTION}]},
         }
     }
 else:

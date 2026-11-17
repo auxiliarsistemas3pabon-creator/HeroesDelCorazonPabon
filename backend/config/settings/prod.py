@@ -51,7 +51,8 @@ if _render_redis_url:
     CHANNEL_LAYERS = {
         "default": {
             "BACKEND": "channels_redis.core.RedisChannelLayer",
-            "CONFIG": {"hosts": [_render_redis_url]},
+            # CHANNELS_REDIS_CONNECTION (base.py): evita el corte cada ~5 s de redis-py >= 6.
+            "CONFIG": {"hosts": [{"address": _render_redis_url, **CHANNELS_REDIS_CONNECTION}]},
         }
     }
 else:
