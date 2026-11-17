@@ -180,11 +180,15 @@ function Row({ evaluation, onSave, busy, expanded, onToggle, onEditProgram }) {
         <td className="break-words px-2 py-3 font-semibold text-app sm:px-3">
           {evaluation.name}
         </td>
-        <td className="px-1 py-3 text-center sm:px-3">{evaluation.categories}</td>
-        <td className="px-1 py-3 text-center sm:px-3">{evaluation.criteria}</td>
-        <td className="px-1 py-3 text-center sm:px-3">{evaluation.answers}</td>
+        <td className="px-1 py-3 text-center sm:px-3">{evaluation.evaluations_total ?? 0}</td>
+        <td className="px-1 py-3 text-center sm:px-3">{evaluation.evaluations_pending ?? 0}</td>
+        <td className="px-1 py-3 text-center sm:px-3">{evaluation.evaluations_done ?? 0}</td>
         <td className="break-words px-2 py-3 text-center align-middle text-app-muted sm:px-3">
-          {evaluation.evaluated_by?.length ? evaluation.evaluated_by.join(', ') : '—'}
+          {evaluation.pending_evaluators?.length
+            ? evaluation.pending_evaluators.map((pending) => (
+              <span key={pending.id} className="block">{pending.name} (faltan {pending.missing})</span>
+            ))
+            : '—'}
         </td>
         <td className="whitespace-nowrap px-2 py-3 text-center align-middle sm:px-3">
           {evaluation.closes_on ? formatDay(evaluation.closes_on) : 'Sin fecha'}
@@ -257,14 +261,22 @@ export function EvaluationsListPage() {
   useEffect(() => {
     let current = true
     let intervalId
-    // Refresco ligero: solo actualiza el contador de respuestas (no pisa ediciones locales del resto de campos).
+    // Refresco ligero: solo actualiza el avance (totales y pendientes), sin pisar ediciones locales del resto de campos.
     const refreshAnswerCounts = async () => {
       try {
         const latest = await api(OWN_URL)
         if (!current) return
         setEvaluations((existing) => existing?.map((evaluation) => {
           const updated = latest.find((item) => item.id === evaluation.id)
-          return updated ? { ...evaluation, answers: updated.answers, evaluated_by: updated.evaluated_by } : evaluation
+          return updated
+            ? {
+              ...evaluation,
+              evaluations_total: updated.evaluations_total,
+              evaluations_done: updated.evaluations_done,
+              evaluations_pending: updated.evaluations_pending,
+              pending_evaluators: updated.pending_evaluators,
+            }
+            : evaluation
         }))
       } catch (e) {
         if (current) setError(errorMessage(e))
@@ -352,10 +364,10 @@ export function EvaluationsListPage() {
                 <thead>
                   <tr className="border-b border-app">
                     <th className={`${TH} whitespace-nowrap px-2 sm:px-3`}>Evaluación</th>
-                    <th className={`${TH} whitespace-nowrap px-1 sm:px-2`} style={{ textAlign: 'center' }}>Categorías</th>
-                    <th className={`${TH} whitespace-nowrap px-1 sm:px-2`} style={{ textAlign: 'center' }}>Preguntas</th>
-                    <th className={`${TH} whitespace-nowrap px-1 sm:px-2`} style={{ textAlign: 'center' }}>Respuestas</th>
-                    <th className={`${TH} whitespace-nowrap px-2 sm:px-3`} style={{ textAlign: 'center' }}>Evaluado por</th>
+                    <th className={`${TH} px-1 sm:px-2`} style={{ textAlign: 'center' }}>Total de evaluaciones</th>
+                    <th className={`${TH} px-1 sm:px-2`} style={{ textAlign: 'center' }}>Evaluaciones programadas</th>
+                    <th className={`${TH} px-1 sm:px-2`} style={{ textAlign: 'center' }}>Evaluaciones realizadas</th>
+                    <th className={`${TH} whitespace-nowrap px-2 sm:px-3`} style={{ textAlign: 'center' }}>Pendiente por evaluación</th>
                     <th className={`${TH} whitespace-nowrap px-2 sm:px-3`} style={{ textAlign: 'center' }}>Fecha de cierre</th>
                     <th className={`${TH} whitespace-nowrap px-1 sm:px-2`} style={{ textAlign: 'center' }}>Estado</th>
                     <th className={`${TH} whitespace-nowrap px-1 sm:px-2`} style={{ textAlign: 'center' }}>Acciones</th>

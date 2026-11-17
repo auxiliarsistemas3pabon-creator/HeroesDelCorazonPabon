@@ -53,6 +53,10 @@ vi.mock('./pages/StaffImportPage', () => ({
   StaffImportPage: () => <div>StaffImportPage</div>,
 }))
 
+vi.mock('./pages/UsersAdminPage', () => ({
+  UsersAdminPage: () => <div>UsersAdminPage</div>,
+}))
+
 // =====================================================
 // PRUEBAS DE APP
 // =====================================================
@@ -203,16 +207,72 @@ describe('App.jsx - Rutas, autenticación y permisos', () => {
   // 5. RUTAS INTERNAS
   // ===================================================
 
+  const asRole = (role) => mockUseAuth.mockReturnValue({
+    user: { ...usuario, role },
+    loading: false,
+    logout: vi.fn(),
+    realtimeStatus: 'disconnected',
+    realtimeNotice: '',
+  })
+
+  it('debe mostrar Evaluar al colaborador', async () => {
+    renderApp('/evaluations')
+
+    expect(await screen.findByText('EvaluationPage')).toBeInTheDocument()
+  })
+
   it.each([
-    ['/evaluations', 'EvaluationPage'],
     ['/results', 'ResultsPage'],
     ['/evaluations-list', 'EvaluationsListPage'],
     ['/create', 'FormCreatePage'],
     ['/program', 'FormProgramPage'],
-  ])('debe mostrar la página correspondiente a %s', async (path, page) => {
+  ])('debe mostrar %s al jefe', async (path, page) => {
+    asRole('boss')
     renderApp(path)
 
     expect(await screen.findByText(page)).toBeInTheDocument()
+  })
+
+  // ===================================================
+  // 5b. URL ESCRITA A MANO SIN PERMISO: SACA AL INICIO DEL ROL
+  // ===================================================
+
+  it.each([
+    ['/results', 'ResultsPage'],
+    ['/evaluations-list', 'EvaluationsListPage'],
+    ['/create', 'FormCreatePage'],
+    ['/program', 'FormProgramPage'],
+    ['/users', 'UsersAdminPage'],
+  ])('debe sacar al colaborador de %s y llevarlo a Evaluar', async (path, page) => {
+    renderApp(path)
+
+    expect(await screen.findByText('EvaluationPage')).toBeInTheDocument()
+    expect(screen.queryByText(page)).not.toBeInTheDocument()
+    expect(window.location.pathname).toBe('/evaluations')
+  })
+
+  it.each(['boss', 'superadmin'])('debe sacar al rol %s de /evaluations y llevarlo al Dashboard', async (role) => {
+    asRole(role)
+    renderApp('/evaluations')
+
+    expect(await screen.findByText('DashboardPage')).toBeInTheDocument()
+    expect(screen.queryByText('EvaluationPage')).not.toBeInTheDocument()
+    expect(window.location.pathname).toBe('/dashboard')
+  })
+
+  it('debe sacar /index.html escrito a mano al inicio del rol', async () => {
+    renderApp('/index.html')
+
+    expect(await screen.findByText('EvaluationPage')).toBeInTheDocument()
+    expect(window.location.pathname).toBe('/evaluations')
+  })
+
+  it('no debe entrar en bucle con un rol sin páginas propias', async () => {
+    asRole('personal')
+    renderApp('/create')
+
+    expect(await screen.findByText('Tu cuenta no tiene acceso a esta aplicación.')).toBeInTheDocument()
+    expect(screen.queryByText('FormCreatePage')).not.toBeInTheDocument()
   })
 
   // ===================================================

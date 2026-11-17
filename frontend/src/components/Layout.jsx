@@ -120,7 +120,7 @@ export function Layout() {
             </button>
           </div>
           <nav className="flex flex-col gap-1 p-3">
-            {LINKS[user.role].map(({ to, label, icon: Icon, end }) => (
+            {(LINKS[user.role] ?? []).map(({ to, label, icon: Icon, end }) => (
               <NavLink
                 key={to}
                 to={to}

@@ -21,8 +21,8 @@ from common.permissions import MANAGER_ROLES, IsBossOrSuperAdmin, owned_by
 from users.areas import is_removed_area
 from users.models import User
 
+from .limits import evaluation_progress, scored_this_month
 from .limits import monthly_limit as evaluation_limit
-from .limits import scored_this_month
 from .models import Category, Criterion, Evaluation, EvaluationSetting, Question
 from .staff_import import (
     AnswersFileError,
@@ -73,10 +73,10 @@ def _listing(evaluation):
     ]
 
 
-def _evaluation_data(evaluation):
+def _evaluation_data(evaluation, with_progress=True):
     answers = evaluation.questions.values("collaborator", "personal", "created_at__date").distinct().count()
     evaluators = User.objects.filter(pk__in=evaluation.questions.values("collaborator")).order_by("first_name", "last_name", "username")
-    return {
+    data = {
         "id": evaluation.pk,
         "name": evaluation.name,
         "evaluated_by": [user.get_full_name() or user.username for user in evaluators],
@@ -93,6 +93,18 @@ def _evaluation_data(evaluation):
         "categories": evaluation.categories.count(),
         "criteria": Criterion.objects.filter(category__evaluation=evaluation, is_active=True).count(),
     }
+    if not with_progress:
+        return data
+    progress = evaluation_progress(evaluation)
+    data.update({
+        # Avance de la ronda actual (ver limits.evaluation_progress): total, realizadas, programadas (pendientes)
+        # y colaboradores que aún deben evaluaciones.
+        "evaluations_total": progress["total"],
+        "evaluations_done": progress["done"],
+        "evaluations_pending": progress["pending"],
+        "pending_evaluators": progress["pending_evaluators"],
+    })
+    return data
 
 
 # Reading is open to every boss; writing (write=True) only reaches evaluations they created (None otherwise,
@@ -195,7 +207,8 @@ class EvaluationsView(AuditLogMixin, APIView):
             if request.query_params.get("base") == "1":
                 evaluations = evaluations.filter(source__isnull=True)
             evaluations = evaluations.distinct()
-        data = [_evaluation_data(e) for e in evaluations]
+        # El avance (quién está pendiente) es información del jefe: no se calcula ni se envía a colaboradores.
+        data = [_evaluation_data(e, with_progress=request.user.role in MANAGER_ROLES) for e in evaluations]
         if request.user.role not in MANAGER_ROLES:
             for evaluation, item in zip(evaluations, data):
                 item["remaining"] = max(0, evaluation_limit(evaluation) - len(scored_this_month(request.user, evaluation)))

@@ -35,21 +35,36 @@ class PageLoadBoundary extends Component {
   }
 }
 
-// Destino de "/": roles `boss`/`superadmin` -> dashboard; los demás -> evaluar.
-// El dashboard es solo del jefe; el colaborador entra directo a evaluar.
-function Home() {
-  const { user } = useAuth()
-  return user.role === 'boss' || user.role === 'superadmin' ? <DashboardPage /> : <Navigate to="/evaluations" replace />
+const MANAGERS = ['boss', 'superadmin']
+const SUPERADMIN = ['superadmin']
+const COLLABORATORS = ['collaborator']
+
+// Inicio de cada rol: jefe/superadmin -> dashboard; colaborador -> evaluar; otro rol -> sin acceso (null).
+function homeFor(role) {
+  if (MANAGERS.includes(role)) return '/dashboard'
+  if (COLLABORATORS.includes(role)) return '/evaluations'
+  return null
 }
 
-function StaffRoute() {
-  const { user } = useAuth()
-  return user.role === 'superadmin' ? <StaffImportPage /> : <Navigate to="/dashboard" replace />
+// Un rol sin páginas propias (p. ej. `personal`, que nunca debería iniciar sesión) no se redirige: evita un bucle.
+function NoAccess() {
+  return <p role="alert" className="text-sm text-app-muted">Tu cuenta no tiene acceso a esta aplicación.</p>
 }
 
-function UsersRoute() {
+// Guardia por rol: si alguien escribe o pega a mano una URL que no le corresponde, se le saca automáticamente
+// a su inicio (sin mostrar la página ni un instante). La sesión ya la exige <Layout>; el backend sigue validando.
+function RoleRoute({ roles, children }) {
   const { user } = useAuth()
-  return user.role === 'superadmin' ? <UsersAdminPage /> : <Navigate to="/dashboard" replace />
+  if (roles.includes(user.role)) return children
+  const home = homeFor(user.role)
+  return home ? <Navigate to={home} replace /> : <NoAccess />
+}
+
+// Cualquier ruta desconocida (/index.html, rutas inventadas...) vuelve al inicio de su rol.
+function HomeRedirect() {
+  const { user } = useAuth()
+  const home = homeFor(user.role)
+  return home ? <Navigate to={home} replace /> : <NoAccess />
 }
 
 // /login va fuera de <Layout>; las demás rutas autenticadas usan Layout y exigen sesión.
@@ -65,17 +80,16 @@ function App() {
           <Route path="/login" element={<LoginPage />} />
           <Route path="/" element={<LoginPage />} />
           <Route element={<Layout />}>
-            <Route path="/dashboard" element={<Home />} />
-            <Route path="/evaluations" element={<EvaluationPage />} />
-            <Route path="/results" element={<ResultsPage />} />
-            <Route path="/evaluations-list" element={<EvaluationsListPage />} />
-            <Route path="/create" element={<FormCreatePage />} />
-            <Route path="/program" element={<FormProgramPage/>} />
-            {/* Solo el superadmin carga datos; el backend lo exige igualmente */}
-            <Route path="/staff" element={<StaffRoute />} />
-            <Route path="/users" element={<UsersRoute />} />
-            {/* Cualquier ruta desconocida vuelve al destino autenticado por rol */}
-            <Route path="*" element={<Navigate to="/dashboard" replace />} />
+            <Route path="/dashboard" element={<RoleRoute roles={MANAGERS}><DashboardPage /></RoleRoute>} />
+            <Route path="/evaluations" element={<RoleRoute roles={COLLABORATORS}><EvaluationPage /></RoleRoute>} />
+            <Route path="/results" element={<RoleRoute roles={MANAGERS}><ResultsPage /></RoleRoute>} />
+            <Route path="/evaluations-list" element={<RoleRoute roles={MANAGERS}><EvaluationsListPage /></RoleRoute>} />
+            <Route path="/create" element={<RoleRoute roles={MANAGERS}><FormCreatePage /></RoleRoute>} />
+            <Route path="/program" element={<RoleRoute roles={MANAGERS}><FormProgramPage /></RoleRoute>} />
+            {/* Solo el superadmin carga datos y administra usuarios; el backend lo exige igualmente */}
+            <Route path="/staff" element={<RoleRoute roles={SUPERADMIN}><StaffImportPage /></RoleRoute>} />
+            <Route path="/users" element={<RoleRoute roles={SUPERADMIN}><UsersAdminPage /></RoleRoute>} />
+            <Route path="*" element={<HomeRedirect />} />
           </Route>
         </Routes>
         </PageLoadBoundary>
