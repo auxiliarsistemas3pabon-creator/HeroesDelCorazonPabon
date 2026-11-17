@@ -33,12 +33,19 @@ class EvaluationClosingDateTests(APITestCase):
         )
         self.assertEqual(invalid.status_code, 400)
 
-        closed = self.client.patch(
+        # Una fecha anterior a hoy ya no se acepta al programar (para cerrar está el botón "Cerrar").
+        past = self.client.patch(
             f"{self.EVALUATIONS}{created.data['id']}/",
             {"closes_on": "2000-01-01"},
             format="json",
         )
-        self.assertEqual(closed.data["status"], "closed")
+        self.assertEqual(past.status_code, 400)
+
+        # Cierre automático: cuando la fecha de cierre ya pasó, la evaluación queda cerrada.
+        Evaluation.objects.filter(pk=created.data["id"]).update(closes_on="2000-01-01")
+        listed = self.client.get(self.EVALUATIONS)
+        closed = next(item for item in listed.data if item["id"] == created.data["id"])
+        self.assertEqual(closed["status"], "closed")
 
     def test_boss_can_assign_all_selected_or_no_evaluation_areas(self):
         User.objects.create_user(

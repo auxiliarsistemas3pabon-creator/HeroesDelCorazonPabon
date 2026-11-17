@@ -44,6 +44,8 @@ class ProgramClosingDateTests(APITestCase):
         self.assertEqual(response.data["closes_on"], PAST_MESSAGE)
 
     def test_editing_a_closed_evaluation_without_changing_its_date_still_works(self):
+        # Solo el superadmin puede editar una evaluación ya cerrada; la regla de fecha no le impide guardar otros campos.
+        self.client.force_authenticate(create_user("closing.admin", User.Role.SUPERADMIN))
         past = timezone.localdate() - timedelta(days=5)
         Evaluation.objects.filter(pk=self.form.pk).update(closes_on=past)
         response = self.client.patch(
