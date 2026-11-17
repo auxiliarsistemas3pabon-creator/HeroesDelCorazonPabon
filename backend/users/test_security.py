@@ -64,6 +64,38 @@ class LoginSecurityTests(APITestCase):
         r = self.post("colab.demo", PASSWORD)
         self.assertEqual(r.status_code, 401)
 
+    def _admin_client(self):
+        client = APIClient()
+        client.force_authenticate(create_user("admin.demo", User.Role.SUPERADMIN))
+        return client
+
+    def test_password_reset_only_changes_password_and_user_can_login(self):
+        r = self._admin_client().patch(f"/api/v1/users/admin/{self.user.pk}/", {"new_password": "Nueva-Clave-2026*"}, format="json")
+        self.assertEqual(r.status_code, 200)
+        self.assertTrue(r.data["is_active"])
+        login = self.post("colab.demo", "Nueva-Clave-2026*")
+        self.assertEqual(login.status_code, 200)
+        self.assertIn("access_token", login.cookies)
+        # La clave anterior deja de servir y el no registrado sigue sin acceso.
+        self.assertEqual(APIClient().post(LOGIN, {"username": "colab.demo", "password": PASSWORD}, format="json").status_code, 401)
+        self.assertEqual(self.post("nadie.registrado", "Nueva-Clave-2026*").data["code"], "user_not_found")
+
+    def test_password_reset_does_not_reactivate_disabled_account(self):
+        self.user.is_active = False
+        self.user.save()
+        r = self._admin_client().patch(f"/api/v1/users/admin/{self.user.pk}/", {"new_password": "Nueva-Clave-2026*"}, format="json")
+        self.assertEqual(r.status_code, 200)
+        self.assertFalse(r.data["is_active"])
+        self.assertEqual(self.post("colab.demo", "Nueva-Clave-2026*").status_code, 401)
+
+    def test_disabled_account_cannot_be_reactivated(self):
+        self.user.is_active = False
+        self.user.save()
+        r = self._admin_client().patch(f"/api/v1/users/admin/{self.user.pk}/", {"is_active": True}, format="json")
+        self.assertEqual(r.status_code, 400)
+        self.user.refresh_from_db()
+        self.assertFalse(self.user.is_active)
+
     def test_sql_injection_in_username_is_blocked_by_middleware(self):
         r = self.post("' OR '1'='1' --", PASSWORD)
         self.assertEqual(r.status_code, 403)

@@ -4,9 +4,10 @@ Settings de producción.
 Endurece la seguridad y desactiva DEBUG. Las variables sensibles deben venir
 exclusivamente de variables de entorno.
 """
-from django.core.exceptions import ImproperlyConfigured
 import os
 from urllib.parse import urlparse
+
+from django.core.exceptions import ImproperlyConfigured
 
 from .base import *  # noqa: F401,F403
 

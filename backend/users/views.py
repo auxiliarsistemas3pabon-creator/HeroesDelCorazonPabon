@@ -1,18 +1,14 @@
 """Vistas de autenticación, cuentas y directorios de usuarios para /api/v1/."""
 
 
+from axes.utils import reset as reset_login_attempts
 from django.conf import settings
 from django.contrib.auth import authenticate
 from django.contrib.auth.backends import ModelBackend
-
 from django.core.exceptions import PermissionDenied
-
 from django.db import transaction
 from django.middleware.csrf import get_token
-
-
 from django.utils.translation import gettext as _
-from axes.utils import reset as reset_login_attempts
 from rest_framework import generics, status
 from rest_framework.parsers import MultiPartParser
 from rest_framework.permissions import AllowAny
@@ -37,7 +33,6 @@ from .serializers import (
     UserSerializer,
 )
 from .staff_import import StaffFileError, import_staff
-
 
 # La cookie de refresh solo viaja a /api/v1/auth/*, reduciendo su exposicion al resto de la API.
 REFRESH_COOKIE_PATH = "/api/v1/auth/"
