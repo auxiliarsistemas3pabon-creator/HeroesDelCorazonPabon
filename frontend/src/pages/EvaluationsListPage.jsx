@@ -186,7 +186,7 @@ function Row({ evaluation, onSave, busy, expanded, onToggle, onEditProgram }) {
         <td className="break-words px-2 py-3 text-center align-middle text-app-muted sm:px-3">
           {evaluation.pending_evaluators?.length
             ? evaluation.pending_evaluators.map((pending) => (
-              <span key={pending.id} className="block">{pending.name} (faltan {pending.missing})</span>
+              <span key={pending.id} className="block">{pending.name}</span>
             ))
             : '—'}
         </td>
