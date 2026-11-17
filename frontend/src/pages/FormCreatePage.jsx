@@ -94,6 +94,8 @@ function EvaluationsManager({ evaluations, selected, onSelect, onChanged, onErro
   const [editing, setEditing] = useState(null)
   const [editLoading, setEditLoading] = useState(false)
   const [busy, setBusy] = useState(false)
+  // Error al guardar una evaluación nueva: se muestra dentro del modal (el aviso de la página queda detrás de él).
+  const [createError, setCreateError] = useState(null)
   const [page, setPage] = useState(1)
   const { user } = useAuth()
 
@@ -105,15 +107,16 @@ function EvaluationsManager({ evaluations, selected, onSelect, onChanged, onErro
 
   // Ejecuta una llamada de escritura, recarga la lista vía onChanged y devuelve true/false para que
   // el llamador decida si limpiar su estado local.
-  async function act(path, options) {
+  async function act(path, options, showError = onError) {
     onError(null)
+    showError(null)
     setBusy(true)
     try {
       const result = await api(path, options)
       await onChanged(result)
       return true
     } catch (e) {
-      onError(errorMessage(e))
+      showError(errorMessage(e))
       return false
     } finally {
       setBusy(false)
@@ -127,7 +130,7 @@ function EvaluationsManager({ evaluations, selected, onSelect, onChanged, onErro
       name: category.name.trim(),
       criteria: category.questions.map((question) => question.trim()).filter(Boolean),
     }))
-    if (await act(EVALUATIONS, { method: 'POST', body: { name, rating_type: ratingType, categories: payloadCategories } })) {
+    if (await act(EVALUATIONS, { method: 'POST', body: { name, rating_type: ratingType, categories: payloadCategories } }, setCreateError)) {
       setName('')
       setRatingType('')
       setCategories([blankCategory()])
@@ -328,7 +331,7 @@ function EvaluationsManager({ evaluations, selected, onSelect, onChanged, onErro
       </Card>
       <Button type="button" className="self-start" onClick={() => setModalOpen(true)}>Crear evaluación</Button>
       {modalOpen && (
-        <Modal title="Crear evaluación" onClose={() => { setModalOpen(false); setName(''); setRatingType(''); setCategories([blankCategory()]) }}>
+        <Modal title="Crear evaluación" onClose={() => { setModalOpen(false); setName(''); setRatingType(''); setCategories([blankCategory()]); setCreateError(null) }}>
           <form className="grid gap-4" onSubmit={create}>
             <input
               autoFocus
@@ -336,7 +339,10 @@ function EvaluationsManager({ evaluations, selected, onSelect, onChanged, onErro
               value={name}
               placeholder="Nombre de la nueva evaluación"
               aria-label="Nombre de la nueva evaluación"
-              onChange={(e) => setName(e.target.value)}
+              onChange={(e) => {
+                setName(e.target.value)
+                setCreateError(null)
+              }}
             />
             <label className="grid gap-1.5 text-sm font-medium text-app">
               Tipo de calificación
@@ -367,6 +373,7 @@ function EvaluationsManager({ evaluations, selected, onSelect, onChanged, onErro
             })}
             <Button type="button" variant="secondary" onClick={() => setCategories((current) => [...current, blankCategory()])}>+ Añadir categoría</Button>
             </>}
+            {createError && <div role="alert" className={ALERT_ERROR}>{createError}</div>}
             <div className="flex justify-end">
               <Button type="submit" disabled={busy || !formReady}>{busy ? 'Guardando...' : 'Guardar evaluación'}</Button>
             </div>

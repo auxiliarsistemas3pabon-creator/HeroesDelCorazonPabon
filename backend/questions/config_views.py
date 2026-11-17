@@ -211,6 +211,10 @@ class EvaluationsView(AuditLogMixin, APIView):
         name = _clean(request.data.get("name"))
         if not name:
             return _bad("name", _("Enter a name."))
+        # No se permiten dos evaluaciones creadas con el mismo nombre (sin distinguir mayúsculas).
+        # Las copias programadas sí lo repiten, pero se crean en EvaluationProgramCreateView, no aquí.
+        if Evaluation.objects.filter(name__iexact=name).exists():
+            return _bad("name", "Esta evaluación ya está en uso.")
         rating_type = request.data.get("rating_type", Evaluation.RatingType.QUANTITATIVE)
         if rating_type not in Evaluation.RatingType.values:
             return _bad("rating_type", _("Choose quantitative or descriptive ratings."))
