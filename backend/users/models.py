@@ -93,6 +93,9 @@ class TrustedDevice(models.Model):
     created_at = models.DateTimeField(auto_now_add=True)
     last_seen = models.DateTimeField(auto_now_add=True)
     revoked = models.BooleanField(default=False)
+    # jti del refresh token de la sesion abierta en este dispositivo ("" = sin sesion).
+    # Permite rechazar un inicio de sesion desde otro navegador mientras esta siga activa.
+    session_jti = models.CharField(max_length=64, blank=True, default="")
 
     class Meta:
         verbose_name = _("Trusted device")

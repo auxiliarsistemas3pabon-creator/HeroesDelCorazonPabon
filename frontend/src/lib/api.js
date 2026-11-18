@@ -39,6 +39,9 @@ export function errorMessage(error, fallback = 'Ocurrió un error') {
     console.warn('Permiso no autorizado')
     return securityCode === 'user_not_found' ? 'Usuario no encontrado.' : 'Acceso no autorizado.'
   }
+  if (securityCode === 'session_active') {
+    return 'Esta cuenta ya tiene una sesión abierta en otro navegador. Cierra sesión allí para poder entrar aquí.'
+  }
   if (securityCode === 'private_mode') {
     return 'No se permite el acceso desde una ventana privada o de incógnito. Usa una ventana normal del navegador.'
   }

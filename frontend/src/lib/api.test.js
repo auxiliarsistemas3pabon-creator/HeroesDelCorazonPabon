@@ -20,6 +20,9 @@ describe('errorMessage', () => {
   it('modo privado', () => {
     expect(errorMessage({ status: 403, data: { code: 'private_mode' } })).toMatch(/incógnito/)
   })
+  it('sesión abierta en otro navegador', () => {
+    expect(errorMessage({ status: 403, data: { code: 'session_active' } })).toMatch(/otro navegador/)
+  })
   it('sesión no establecida', () => {
     expect(errorMessage({ code: 'SESSION_NOT_ESTABLISHED' })).toMatch(/cookie/)
   })

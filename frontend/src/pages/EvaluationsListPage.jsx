@@ -14,7 +14,7 @@ import { ratingLabel } from '../lib/ratingScales'
 // Ojo: este nombre sombrea el global `URL` del navegador dentro de este módulo.
 const URL = '/questions/evaluations/'
 // Solo las evaluaciones propias: son las únicas que el backend deja editar (las ajenas responden 404).
-const OWN_URL = `${URL}?created_by=me`
+const OWN_URL = `${URL}?created_by=me&programmed=1`
 // Filas por página de la tabla (el paginado es en cliente; la API devuelve la lista completa).
 const PAGE_SIZE = 4
 // Mapea el `status` calculado por el backend (disponible/cerrada, incluye cierre por fecha) a su badge.

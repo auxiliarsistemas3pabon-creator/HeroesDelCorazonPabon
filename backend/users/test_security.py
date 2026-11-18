@@ -143,11 +143,42 @@ class DeviceSessionTests(APITestCase):
         self.login(self.client)
         self.assertEqual(TrustedDevice.objects.filter(user=self.user).count(), 1)
 
-    def test_second_browser_gets_its_own_device(self):
+    def test_second_browser_gets_its_own_device_after_logout(self):
         self.login(self.client)
+        self.client.post("/api/v1/auth/logout/")
         other = APIClient()
         self.assertEqual(self.login(other).status_code, 200)
         self.assertEqual(TrustedDevice.objects.filter(user=self.user, revoked=False).count(), 2)
+
+    def test_second_browser_is_rejected_while_session_is_active(self):
+        self.login(self.client)
+        r = self.login(APIClient())  # p. ej. ventana de incognito
+        self.assertEqual(r.status_code, 403)
+        self.assertEqual(r.data["code"], "session_active")
+        self.assertNotIn("access_token", r.cookies)
+        self.assertEqual(TrustedDevice.objects.filter(user=self.user).count(), 1)
+        # La sesion original sigue funcionando.
+        self.assertEqual(self.client.get("/api/v1/users/collaborators/").status_code, 200)
+
+    def test_same_browser_can_log_in_again_while_active(self):
+        self.login(self.client)
+        self.assertEqual(self.login(self.client).status_code, 200)
+
+    def test_stale_session_does_not_block_other_browser(self):
+        from datetime import timedelta
+
+        from django.utils import timezone
+
+        self.login(self.client)
+        TrustedDevice.objects.update(last_seen=timezone.now() - timedelta(hours=2))
+        self.assertEqual(self.login(APIClient()).status_code, 200)
+
+    def test_rule_applies_to_superadmin(self):
+        create_user("super.demo", role=User.Role.SUPERADMIN)
+        first, second = APIClient(), APIClient()
+        payload = {"username": "super.demo", "password": PASSWORD}
+        self.assertEqual(first.post(LOGIN, payload, format="json").status_code, 200)
+        self.assertEqual(second.post(LOGIN, payload, format="json").status_code, 403)
 
     def test_stolen_session_cookies_without_device_cookie_are_rejected(self):
         r = self.login(self.client)
@@ -172,7 +203,9 @@ class DeviceSessionTests(APITestCase):
 
     def test_device_limit_revokes_the_oldest(self):
         for _ in range(7):
-            self.login(APIClient())
+            client = APIClient()
+            self.login(client)
+            client.post("/api/v1/auth/logout/")
         self.assertEqual(TrustedDevice.objects.filter(user=self.user, revoked=False).count(), 5)
 
     def test_legacy_session_without_device_claim_is_bound_on_refresh(self):

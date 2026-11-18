@@ -23,7 +23,15 @@ from common.permissions import IsBossOrSuperAdmin, IsSuperAdmin
 from common.security import UNAUTHORIZED_MESSAGE, log_unauthorized, looks_malicious
 
 from .areas import is_removed_area
-from .devices import DEVICE_CLAIM, find_device, register_device, set_device_cookie
+from .devices import (
+    DEVICE_CLAIM,
+    close_session,
+    find_device,
+    has_active_session_elsewhere,
+    open_session,
+    register_device,
+    set_device_cookie,
+)
 from .models import User
 from .serializers import (
     AuthenticatedUserSerializer,
@@ -138,6 +146,15 @@ class LoginView(AuditLogMixin, APIView):
                 status=status.HTTP_401_UNAUTHORIZED,
             )
 
+        # Una sola sesion a la vez: si sigue abierta en otro navegador (o incognito), se rechaza.
+        if has_active_session_elsewhere(request, user):
+            log_unauthorized(request, "session_active_elsewhere")
+            return Response(
+                {"detail": _("This account already has an open session in another browser. Log out there first."),
+                 "code": "session_active"},
+                status=status.HTTP_403_FORBIDDEN,
+            )
+
         # Usuario registrado con clave correcta: se registra/reutiliza el dispositivo
         # y la sesion queda ligada a el.
         device, raw_device = register_device(request, user)
@@ -145,6 +162,7 @@ class LoginView(AuditLogMixin, APIView):
         response = Response(AuthenticatedUserSerializer(user).data)
         refresh = RefreshToken.for_user(user)
         refresh[DEVICE_CLAIM] = device.pk
+        open_session(device, refresh)
         _set_auth_cookies(response, refresh)
         set_device_cookie(response, raw_device)
         return response
@@ -185,6 +203,7 @@ class RefreshView(AuditLogMixin, APIView):
         response = Response({"detail": "ok"})
         new_refresh = RefreshToken.for_user(user)
         new_refresh[DEVICE_CLAIM] = device.pk
+        open_session(device, new_refresh)
         _set_auth_cookies(response, new_refresh)
         set_device_cookie(response, raw_device)
         return response
@@ -199,7 +218,9 @@ class LogoutView(AuditLogMixin, APIView):
         raw = request.COOKIES.get(settings.AUTH_COOKIE_REFRESH_NAME)
         if raw:
             try:
-                RefreshToken(raw).blacklist()
+                token = RefreshToken(raw)
+                close_session(request, token)
+                token.blacklist()
             except TokenError:
                 pass
         response = Response(status=status.HTTP_204_NO_CONTENT)

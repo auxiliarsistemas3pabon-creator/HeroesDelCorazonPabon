@@ -58,6 +58,36 @@ def register_device(request, user):
     return device, raw
 
 
+def has_active_session_elsewhere(request, user):
+    """True si el usuario tiene una sesion abierta en OTRO navegador/dispositivo.
+
+    Una sesion cuenta como activa si no se cerro (session_jti) y tuvo actividad (login/refresh)
+    dentro de la vida del access token: el frontend renueva al menos con esa frecuencia mientras
+    se usa, asi que una ventana cerrada sin "Cerrar sesion" deja de bloquear pasado ese tiempo.
+    """
+    cutoff = timezone.now() - settings.SIMPLE_JWT["ACCESS_TOKEN_LIFETIME"]
+    active = TrustedDevice.objects.filter(user=user, revoked=False, last_seen__gte=cutoff).exclude(session_jti="")
+    current = find_device(request, user.pk)
+    if current:
+        active = active.exclude(pk=current.pk)
+    return active.exists()
+
+
+def open_session(device, refresh):
+    """Marca la sesion (refresh token) como abierta en el dispositivo y renueva su actividad."""
+    TrustedDevice.objects.filter(pk=device.pk).update(session_jti=refresh["jti"], last_seen=timezone.now())
+
+
+def close_session(request, refresh):
+    """Cierra la sesion del dispositivo dueño del refresh token (solo si la peticion trae su cookie)."""
+    claimed = refresh.get(DEVICE_CLAIM)
+    if claimed is None:
+        return
+    device = find_device(request, refresh.get("user_id"), claimed)
+    if device:
+        TrustedDevice.objects.filter(pk=device.pk).update(session_jti="")
+
+
 def set_device_cookie(response, raw):
     if raw:
         response.set_cookie(

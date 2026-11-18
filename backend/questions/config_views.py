@@ -206,6 +206,9 @@ class EvaluationsView(AuditLogMixin, APIView):
             # ?base=1: solo los formularios originales (no las copias programadas), para "Programar evaluación".
             if request.query_params.get("base") == "1":
                 evaluations = evaluations.filter(source__isnull=True)
+            # ?programmed=1: solo las copias programadas (no los formularios creados), para "Lista de evaluaciones".
+            if request.query_params.get("programmed") == "1":
+                evaluations = evaluations.filter(source__isnull=False)
             evaluations = evaluations.distinct()
         # El avance (quién está pendiente) es información del jefe: no se calcula ni se envía a colaboradores.
         data = [_evaluation_data(e, with_progress=request.user.role in MANAGER_ROLES) for e in evaluations]

@@ -70,7 +70,10 @@ def evaluation_progress(evaluation):
     Each enabled collaborator must score min(monthly limit, eligible people of their area). Returns
     total (expected), done, pending (= total - done) and the collaborators that still owe evaluations.
     Uses the same eligibility rules a collaborator sees: areas, evaluator_ids and personal_ids of the evaluation.
+    A form that was never programmed (no programmed copy origin and never reprogrammed) expects nothing yet.
     """
+    if evaluation.source_id is None and evaluation.program_started_at is None:
+        return {"total": 0, "done": 0, "pending": 0, "pending_evaluators": []}
     people = list(
         User.objects.filter(role__in=[User.Role.COLLABORATOR, User.Role.PERSONAL], is_active=True)
         .exclude(area="")

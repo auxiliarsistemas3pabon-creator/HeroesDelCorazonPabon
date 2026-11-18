@@ -22,8 +22,10 @@ class EvaluationProgressTests(APITestCase):
         self.people = [create_user(f"progress.p{n}", User.Role.PERSONAL, area="Enfermería") for n in range(3)]
         # Otra área: no cuenta para esta evaluación.
         create_user("progress.other", User.Role.COLLABORATOR, area="Urgencias")
+        self.form = Evaluation.objects.create(name="Desempeño", created_by=self.boss)
+        # Programación (copia del formulario): es la que tiene evaluaciones esperadas.
         self.evaluation = Evaluation.objects.create(
-            name="Desempeño", created_by=self.boss, areas=["Enfermería"], monthly_limit=2
+            name="Desempeño", created_by=self.boss, areas=["Enfermería"], monthly_limit=2, source=self.form
         )
 
     def score(self, collaborator, person):
@@ -61,6 +63,14 @@ class EvaluationProgressTests(APITestCase):
         row = self.row()
         self.assertEqual(row["evaluations_total"], 2)
         self.assertEqual([item["id"] for item in row["pending_evaluators"]], [self.ana.pk])
+
+    def test_unprogrammed_form_expects_no_evaluations(self):
+        self.client.force_authenticate(self.boss)
+        form = next(item for item in self.client.get(URL).data if item["id"] == self.form.pk)
+        self.assertEqual(
+            (form["evaluations_total"], form["evaluations_pending"], form["evaluations_done"], form["pending_evaluators"]),
+            (0, 0, 0, []),
+        )
 
     def test_collaborators_do_not_receive_who_is_pending(self):
         row = self.row(self.ana)
