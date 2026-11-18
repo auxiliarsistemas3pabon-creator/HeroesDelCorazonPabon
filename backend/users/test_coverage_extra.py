@@ -35,7 +35,7 @@ class ModelTests(TestCase):
     def test_str_and_blank_email_normalised(self):
         user = User.objects.create_user(username_for("u1"), email="", password=PASSWORD, first_name="A", last_name="B")
         self.assertIsNone(user.email)
-        self.assertEqual(str(user), "u1")
+        self.assertEqual(str(user), username_for("u1"))
         device = TrustedDevice.objects.create(user=user, token_hash="h")
         self.assertEqual(str(device), f"{user.pk}:{device.pk}")
 
@@ -282,7 +282,8 @@ class RegisterValidationTests(APITestCase):
 
     def test_register_ok_and_duplicate(self):
         self.assertEqual(self.register().status_code, 201)
-        self.assertEqual(self.register(username=username_for(username_for("nuevo.demo")).upper()).status_code, 400)
+        # El mismo usuario en mayúsculas también es duplicado.
+        self.assertEqual(self.register(username=username_for("nuevo.demo").upper()).status_code, 400)
 
     def test_validations(self):
         self.assertEqual(self.register(username="   ").status_code, 400)

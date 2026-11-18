@@ -1,5 +1,6 @@
 from rest_framework.test import APITestCase
 
+from common.testing import username_for
 from users.models import User
 
 from ..models import Criterion, Evaluation, Question
@@ -14,9 +15,9 @@ class AnswersImportTests(APITestCase):
     def setUp(self):
         Evaluation.objects.update(monthly_limit=3)  # programmed with the default quota
         self.boss = create_user("boss.demo", User.Role.BOSS)
-        self.ana = create_user("1001", User.Role.COLLABORATOR)
-        self.luis = create_user("1002", User.Role.PERSONAL)
-        self.eva = create_user("1003", User.Role.PERSONAL)
+        self.ana = create_user("ana", User.Role.COLLABORATOR)
+        self.luis = create_user("luis", User.Role.PERSONAL)
+        self.eva = create_user("eva", User.Role.PERSONAL)
         self.first = Evaluation.objects.get()
         Evaluation.objects.filter(pk=self.first.pk, created_by__isnull=True).update(created_by=self.boss)
         self.client.force_authenticate(self.boss)
@@ -52,9 +53,9 @@ class AnswersImportTests(APITestCase):
 
     def test_csv_loads_each_row_into_its_own_evaluation(self):
         r = self.upload(self.csv_file([
-            self.row(self.first.name, "1001", "1002"),
-            self.row("Liderazgo", "1001", "1002", score=5),         # same pair, other evaluation: allowed
-            self.row(str(self.second.pk), "1001", "1003"),          # evaluation by id
+            self.row(self.first.name, self.ana.username, self.luis.username),
+            self.row("Liderazgo", self.ana.username, self.luis.username, score=5),         # same pair, other evaluation: allowed
+            self.row(str(self.second.pk), self.ana.username, self.eva.username),          # evaluation by id
         ]))
         self.assertEqual((r.status_code, r.data["created"], r.data["skipped"], r.data["errors"]), (200, 3, 0, []))
         self.assertEqual(Question.objects.filter(evaluation=self.first).count(), 12)
@@ -64,21 +65,21 @@ class AnswersImportTests(APITestCase):
         self.assertIsNotNone(saved.reviewed_at)
 
     def test_never_duplicates_and_reports_each_bad_row(self):
-        self.upload(self.csv_file([self.row(self.first.name, "1001", "1002")]))
+        self.upload(self.csv_file([self.row(self.first.name, self.ana.username, self.luis.username)]))
         r = self.upload(self.csv_file([
-            self.row(self.first.name, "1001", "1002"),               # already loaded -> skipped
-            self.row(self.first.name, "1001", "1001"),               # scores themselves
-            self.row(self.first.name, "9999", "1002"),               # unknown person
-            self.row("No existe", "1001", "1002"),                   # unknown evaluation
-            self.row(self.first.name, "1001", "1003", score=9),      # score out of range
-            self.row(self.first.name, "1001", "1003", score=3),      # fine
+            self.row(self.first.name, self.ana.username, self.luis.username),               # already loaded -> skipped
+            self.row(self.first.name, self.ana.username, self.ana.username),               # scores themselves
+            self.row(self.first.name, username_for("desconocido"), self.luis.username),               # unknown person
+            self.row("No existe", self.ana.username, self.luis.username),                   # unknown evaluation
+            self.row(self.first.name, self.ana.username, self.eva.username, score=9),      # score out of range
+            self.row(self.first.name, self.ana.username, self.eva.username, score=3),      # fine
         ]))
         self.assertEqual((r.data["created"], r.data["skipped"], len(r.data["errors"])), (1, 1, 4))
         self.assertIn("Fila 3", r.data["errors"][0])
         self.assertEqual(Question.objects.filter(evaluation=self.first).count(), 24)
 
     def test_default_evaluation_when_the_column_is_empty(self):
-        rows = [[""] + self.row(self.first.name, "1001", "1002")[1:]]  # the evaluation cell left empty
+        rows = [[""] + self.row(self.first.name, self.ana.username, self.luis.username)[1:]]  # the evaluation cell left empty
         self.assertEqual(len(self.upload(self.csv_file(rows)).data["errors"]), 1)  # two evaluations: which one?
         ok = self.upload(self.csv_file(rows), evaluation=self.first.pk)
         self.assertEqual((ok.data["created"], ok.data["errors"]), (1, []))
