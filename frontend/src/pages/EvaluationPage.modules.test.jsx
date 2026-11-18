@@ -47,8 +47,31 @@ describe('EvaluationPage: módulos del colaborador', () => {
     render(<EvaluationPage kind="self" />)
     fireEvent.click(await screen.findByRole('button', { name: /Mi autoevaluación/ }))
     expect(await screen.findByText(/Autoevaluación: califícate a ti mismo/)).toBeInTheDocument()
-    expect((await screen.findAllByText('Yo Mismo')).length).toBeGreaterThan(0) // en la lista y en la tabla
+    // No hay a quién elegir: no aparece "Usuarios a evaluar" ni los contadores, solo su tabla de calificación.
+    expect(await screen.findByText('Tu autoevaluación')).toBeInTheDocument()
+    expect(screen.queryByText(/Usuarios a evaluar/)).not.toBeInTheDocument()
+    expect(screen.queryByText(/Seleccionados/)).not.toBeInTheDocument()
     expect(screen.queryByText('Compañera Área')).not.toBeInTheDocument()
+  })
+
+  it('autoevaluación ya respondida: solo el aviso de realizada', async () => {
+    mockApi.mockImplementation((path) => {
+      if (path === '/questions/evaluations/') return Promise.resolve(EVALUATIONS)
+      if (path.startsWith('/questions/form/')) return Promise.resolve([{ name: 'C', criteria: [{ code: 'c1', name: 'Pregunta' }] }])
+      if (path.startsWith('/questions/quota/')) return Promise.resolve({ limit: 1, used: 1, personal: [me.id], assigned: null })
+      return Promise.resolve([])
+    })
+    render(<EvaluationPage kind="self" />)
+    fireEvent.click(await screen.findByRole('button', { name: /Mi autoevaluación/ }))
+    expect(await screen.findByText('Autoevaluación realizada con éxito.')).toBeInTheDocument()
+    expect(screen.queryByText(/Usuarios a evaluar/)).not.toBeInTheDocument()
+    expect(screen.queryByText('Tu autoevaluación')).not.toBeInTheDocument()
+  })
+
+  it('en las grupales sigue apareciendo "Usuarios a evaluar"', async () => {
+    render(<EvaluationPage kind="group" />)
+    fireEvent.click(await screen.findByRole('button', { name: /Grupal de desempeño/ }))
+    expect(await screen.findByText(/Usuarios a evaluar/)).toBeInTheDocument()
   })
 
   it('sin individuales abiertas avisa en su propio módulo', async () => {

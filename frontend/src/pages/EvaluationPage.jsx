@@ -120,9 +120,12 @@ function EvaluationForm({ evaluation, onBack }) {
 
       <form onSubmit={onSubmit} className="space-y-4">
         {error && <div role="alert" className={ALERT_ERROR}>{error}</div>}
-        {saved && <div className={ALERT_OK}>Evaluaciones enviadas al jefe de área.</div>}
+        {saved && <div className={ALERT_OK}>{isSelf ? 'Autoevaluación enviada al jefe de área.' : 'Evaluaciones enviadas al jefe de área.'}</div>}
 
-        <Card>
+        {/* Autoevaluación: no hay a quién elegir (es el propio colaborador), así que no se muestra "Usuarios a evaluar". */}
+        {isSelf && quota && max === 0 && <div className={ALERT_OK}>Autoevaluación realizada con éxito.</div>}
+
+        {!isSelf && <Card>
           <h3 className="text-base font-semibold text-app">Usuarios a evaluar ({effectiveSelected.length} {fixedPeople ? 'asignados' : 'seleccionados'})</h3>
           {quota && max > 0 && <p className="mt-1 text-sm text-app-muted">Pendientes por evaluar este mes: {pending} de {quota.limit}. Ya evaluaste {quota.used}.</p>}
           {quota && max === 0 && <div className={`mt-2 ${ALERT_OK}`}>Evaluación realizada con éxito.</div>}
@@ -160,14 +163,14 @@ function EvaluationForm({ evaluation, onBack }) {
             </div>
           )}
           {full && !fixedPeople && <p className="mt-2.5 text-xs text-app-muted">Ya elegiste a los {max} compañeros. Desmarca uno si quieres cambiarlo.</p>}
-        </Card>
+        </Card>}
 
         {effectiveSelected.map((personId) => {
           // scopedPeople incluye al propio colaborador en la autoevaluación (la lista de compañeros no lo trae).
           const person = scopedPeople.find((p) => p.id === personId)
           return (
             <Card key={personId}>
-              <h3 className="text-base font-semibold text-app">{person.first_name} {person.last_name}</h3>
+              <h3 className="text-base font-semibold text-app">{isSelf ? 'Tu autoevaluación' : `${person.first_name} ${person.last_name}`}</h3>
               <ScoreTable
                 name={`person-${personId}`}
                 categories={categories}
@@ -179,8 +182,8 @@ function EvaluationForm({ evaluation, onBack }) {
           )
         })}
 
-        <div className="flex items-center justify-between gap-3">
-          <span className="text-sm text-app-muted">Seleccionados {effectiveSelected.length} · pendientes por evaluar {pending}</span>
+        <div className={cn('flex items-center gap-3', isSelf ? 'justify-end' : 'justify-between')}>
+          {!isSelf && <span className="text-sm text-app-muted">Seleccionados {effectiveSelected.length} · pendientes por evaluar {pending}</span>}
           <Button type="submit" disabled={saving || !ready}>
             {saving ? 'Enviando...' : 'Enviar'}
           </Button>
