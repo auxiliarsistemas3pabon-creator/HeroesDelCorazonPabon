@@ -19,13 +19,34 @@ function isSafari() {
   )
 }
 
+// Cuota de almacenamiento temporal: la API webkit es la que refleja el límite de incógnito en Chromium.
+function chromiumQuota() {
+  const legacy = navigator.webkitTemporaryStorage
+  if (legacy?.queryUsageAndQuota) {
+    return new Promise((resolve) => legacy.queryUsageAndQuota((_usage, quota) => resolve(quota), () => resolve(undefined)))
+  }
+  if (!navigator.storage?.estimate) return Promise.resolve(undefined)
+  return navigator.storage.estimate().then(({ quota }) => quota)
+}
+
 async function chromiumIsPrivate() {
-  if (!navigator.storage?.estimate) return false
-  const { quota } = await navigator.storage.estimate()
+  const quota = await chromiumQuota()
   if (typeof quota !== 'number') return false
   const heapLimit = performance?.memory?.jsHeapSizeLimit ?? 1073741824
-  // En incógnito Chromium limita la cuota de almacenamiento a un valor cercano al heap de JS.
-  return quota < heapLimit
+  // En incógnito Chromium limita la cuota a una fracción de la memoria (< 2x el heap de JS);
+  // una ventana normal recibe un porcentaje del disco (decenas o cientos de GB).
+  return quota < heapLimit * 2
+}
+
+// Firefox y Safari recientes rechazan el sistema de archivos privado del origen (OPFS) en modo privado.
+async function opfsRejected() {
+  if (!navigator.storage?.getDirectory) return false
+  try {
+    await navigator.storage.getDirectory()
+    return false
+  } catch (error) {
+    return /security|transient|not allowed|insecure/i.test(`${error?.name} ${error?.message}`)
+  }
 }
 
 function firefoxIsPrivate() {
@@ -66,8 +87,8 @@ async function safariIsPrivate() {
 
 export async function detectPrivateMode() {
   try {
-    if (isFirefox()) return await firefoxIsPrivate()
-    if (isSafari()) return await safariIsPrivate()
+    if (isFirefox()) return (await opfsRejected()) || (await firefoxIsPrivate())
+    if (isSafari()) return (await opfsRejected()) || (await safariIsPrivate())
     if (isChromium()) return await chromiumIsPrivate()
   } catch {
     /* no se puede determinar */

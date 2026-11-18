@@ -26,16 +26,18 @@ export function LoginPage() {
   const [privateMode, setPrivateMode] = useState(false)
 
   // Las ventanas privadas/incógnito no pueden iniciar sesión: no conservan el dispositivo registrado.
+  // La detección es asíncrona: el envío del formulario la espera para no colarse antes de que termine.
+  const [privateCheck] = useState(() => detectPrivateMode())
   useEffect(() => {
     let active = true
-    detectPrivateMode().then((isPrivate) => {
+    privateCheck.then((isPrivate) => {
       if (active && isPrivate) {
         console.warn('Permiso no autorizado')
         setPrivateMode(true)
       }
     })
     return () => { active = false }
-  }, [])
+  }, [privateCheck])
 
   if (user) return <Navigate to={user.role === 'boss' || user.role === 'superadmin' ? '/dashboard' : '/evaluations'} replace />
 
@@ -47,8 +49,13 @@ export function LoginPage() {
     if (privateMode) return
     setLoading(true)
     try {
+      const isPrivate = await privateCheck
+      if (isPrivate) {
+        setPrivateMode(true)
+        return
+      }
       // login devuelve el usuario para decidir el destino sin esperar a que el contexto se actualice.
-      const authenticatedUser = await login({ ...form, username: form.username.trim(), private_mode: privateMode })
+      const authenticatedUser = await login({ ...form, username: form.username.trim(), private_mode: isPrivate })
       navigate(authenticatedUser.role === 'boss' || authenticatedUser.role === 'superadmin' ? '/dashboard' : '/evaluations', { replace: true })
     } catch (err) {
       setError(errorMessage(err, 'Credenciales inválidas'))

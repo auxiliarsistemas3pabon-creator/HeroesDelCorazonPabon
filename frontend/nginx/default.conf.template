@@ -3,6 +3,9 @@ server {
     server_name _;
     root /usr/share/nginx/html;
     index index.html;
+    # No revelar la versión de nginx ni cabeceras del upstream.
+    server_tokens off;
+    client_max_body_size 10m;
 
     # Compresion de texto: reduce el peso de JS/CSS/JSON entregado por Render.
     gzip on;
@@ -20,6 +23,8 @@ server {
         proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
         proxy_set_header X-Forwarded-Proto $scheme;
         proxy_ssl_server_name on;
+        proxy_hide_header X-Powered-By;
+        proxy_hide_header Server;
     }
 
     location /ws/ {
@@ -34,8 +39,14 @@ server {
         proxy_read_timeout 3600s;
     }
 
+    location ~ /\. {
+        deny all;
+        return 404;
+    }
+
     location = /index.html {
         add_header Cache-Control "no-store, no-cache, must-revalidate, proxy-revalidate, max-age=0" always;
+        include /etc/nginx/snippets/security-headers.conf;
         expires -1;
     }
 
@@ -43,10 +54,12 @@ server {
         try_files $uri =404;
         expires 1y;
         add_header Cache-Control "public, immutable" always;
+        include /etc/nginx/snippets/security-headers.conf;
     }
 
     location / {
         try_files $uri $uri/ /index.html;
         add_header Cache-Control "no-store, no-cache, must-revalidate, proxy-revalidate, max-age=0" always;
+        include /etc/nginx/snippets/security-headers.conf;
     }
 }
