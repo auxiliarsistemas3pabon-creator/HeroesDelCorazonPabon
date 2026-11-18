@@ -113,6 +113,12 @@ def evaluation_progress(evaluation):
     return {"total": total, "done": done, "pending": total - done, "pending_evaluators": missing}
 
 
+def program_completed(evaluation):
+    """Programming with evaluations assigned and all of them done (0 pending): it can no longer be edited."""
+    progress = evaluation_progress(evaluation)
+    return progress["total"] > 0 and progress["pending"] == 0
+
+
 def find_evaluation(raw, open_only=True):
     """The evaluation with that id, or (no id given) the only one there is. None if it cannot be decided."""
     evaluations = Evaluation.objects.available() if open_only else Evaluation.objects.all()

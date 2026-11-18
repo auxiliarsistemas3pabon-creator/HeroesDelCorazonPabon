@@ -19,7 +19,7 @@ from common.permissions import (
 )
 from users.models import User
 
-from .limits import assigned_personal, find_evaluation, monthly_limit, scored_this_month
+from .limits import assigned_personal, find_evaluation, monthly_limit, program_completed, scored_this_month
 from .models import Category, Evaluation, EvaluationSetting, Question
 from .notifications import notify_review
 from .serializers import QuestionCreateSerializer, QuestionSerializer
@@ -401,6 +401,12 @@ class SettingsView(AuditLogMixin, APIView):
         evaluation = Evaluation.objects.filter(pk=raw, **owned_by(request.user)).first() if raw and str(raw).isdigit() else None
         if raw and evaluation is None:
             return _bad("evaluation", _("Choose an evaluation."))
+        # El límite es parte de la programación: con 0 evaluaciones pendientes ya no se edita.
+        if evaluation and program_completed(evaluation):
+            return Response(
+                {"detail": "Esta programación ya no tiene evaluaciones pendientes: no se puede editar."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
         try:
             value = int(request.data.get("monthly_limit"))
         except (TypeError, ValueError):

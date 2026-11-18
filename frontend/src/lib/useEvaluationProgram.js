@@ -122,9 +122,9 @@ export function useEvaluationProgram({ evaluation, staff, onSaved, createNew = f
 
   // Crear: POST a /programs/ (copia nueva de la evaluación). Editar: PATCH de fecha/áreas/modo y PUT aparte
   // del límite mensual (vive en otro recurso), cada uno solo si cambió.
-  // No se programa con fecha pasada: aplica al crear y al cambiar la fecha (una programación ya cerrada
-  // puede editarse en otros campos sin obligar a tocar su fecha).
-  const minCloseDate = createNew || closeDate !== savedCloseDate ? today() : undefined
+  // No se programa ni se edita con fecha pasada: la fecha de cierre debe ser hoy o posterior, siempre
+  // (el calendario no ofrece días anteriores y el backend lo vuelve a validar).
+  const minCloseDate = today()
 
   async function submit(event) {
     event?.preventDefault?.()

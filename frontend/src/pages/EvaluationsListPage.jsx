@@ -173,6 +173,8 @@ function Row({ evaluation, onSave, busy, expanded, onToggle, onEditProgram }) {
   const { user } = useAuth()
   const isClosed = evaluation.status === 'closed'
   const canEdit = !isClosed || user.role === 'superadmin'
+  // Programación completada (evaluaciones asignadas y 0 pendientes): la edición se bloquea automáticamente.
+  const completed = (evaluation.evaluations_total ?? 0) > 0 && (evaluation.evaluations_pending ?? 0) === 0
 
   return (
     <>
@@ -232,7 +234,10 @@ function Row({ evaluation, onSave, busy, expanded, onToggle, onEditProgram }) {
                   size="xs"
                   className="h-9 w-9 px-0"
                   aria-label="Editar programación"
-                  title="Editar programación (áreas, personas, fecha de cierre y límite)"
+                  title={completed
+                    ? 'Programación completada: no tiene evaluaciones pendientes, ya no se puede editar'
+                    : 'Editar programación (áreas, personas, fecha de cierre y límite)'}
+                  disabled={completed}
                   onClick={onEditProgram}
                 >
                   <Pencil size={16} aria-hidden="true" />

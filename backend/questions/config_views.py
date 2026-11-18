@@ -21,7 +21,7 @@ from common.permissions import MANAGER_ROLES, IsBossOrSuperAdmin, owned_by
 from users.areas import is_removed_area
 from users.models import User
 
-from .limits import evaluation_progress, scored_this_month
+from .limits import evaluation_progress, program_completed, scored_this_month
 from .limits import monthly_limit as evaluation_limit
 from .models import Category, Criterion, Evaluation, EvaluationSetting, Question
 from .staff_import import (
@@ -130,6 +130,9 @@ def _clean_evaluator_ids(raw, areas):
 
 
 PAST_CLOSING_DATE = "La fecha de cierre debe ser igual o posterior a la fecha actual."
+PROGRAM_COMPLETED = "Esta programación ya no tiene evaluaciones pendientes: no se puede editar."
+# Campos de la programación; editarlos reinicia la ronda (program_started_at).
+PROGRAM_FIELDS = ("closes_on", "areas", "personal_ids", "evaluator_ids", "random_selection")
 
 
 def _bad(field, message):
@@ -286,6 +289,10 @@ class EvaluationDetailView(AuditLogMixin, APIView):
         closed_response = _closed(evaluation, request.user)
         if closed_response:
             return closed_response
+        # Una programación con todas sus evaluaciones realizadas (0 pendientes) ya no se edita.
+        # Cerrarla (is_available) sigue permitido.
+        if any(field in request.data for field in PROGRAM_FIELDS) and program_completed(evaluation):
+            return Response({"detail": PROGRAM_COMPLETED}, status=status.HTTP_400_BAD_REQUEST)
         if "name" in request.data:
             name = _clean(request.data["name"])
             if not name:
@@ -308,8 +315,8 @@ class EvaluationDetailView(AuditLogMixin, APIView):
             closes_on = parse_date(raw_closes_on) if isinstance(raw_closes_on, str) else None
             if raw_closes_on is not None and closes_on is None:
                 return _bad("closes_on", _("Enter a valid closing date."))
-            # Solo se valida si la fecha cambia: una evaluación ya cerrada puede editarse sin tocar su fecha.
-            if closes_on is not None and closes_on != evaluation.closes_on and closes_on < timezone.localdate():
+            # Al editar la programación la fecha de cierre debe ser hoy o posterior, cambie o no.
+            if closes_on is not None and closes_on < timezone.localdate():
                 return _bad("closes_on", PAST_CLOSING_DATE)
             reprogrammed = reprogrammed or closes_on != evaluation.closes_on
             evaluation.closes_on = closes_on
