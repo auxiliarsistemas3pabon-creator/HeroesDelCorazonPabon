@@ -381,8 +381,8 @@ export function EvaluationsListPage() {
                     <th className={`${TH} whitespace-nowrap px-2 sm:px-3`}>Evaluación</th>
                     <th className={`${TH} whitespace-nowrap px-2 sm:px-3`}>Área</th>
                     {/* !whitespace-normal: estos títulos son largos y deben partirse en líneas en vez de montarse entre columnas. */}
-                    <th className={`${TH} !whitespace-normal break-words px-1 leading-tight sm:px-2`} style={{ textAlign: 'center' }}>Total de evaluaciones</th>
                     <th className={`${TH} !whitespace-normal break-words px-1 leading-tight sm:px-2`} style={{ textAlign: 'center' }}>Evaluaciones programadas</th>
+                    <th className={`${TH} !whitespace-normal break-words px-1 leading-tight sm:px-2`} style={{ textAlign: 'center' }}>Evaluaciones pendientes</th>
                     <th className={`${TH} !whitespace-normal break-words px-1 leading-tight sm:px-2`} style={{ textAlign: 'center' }}>Evaluaciones realizadas</th>
                     <th className={`${TH} !whitespace-normal break-words px-2 leading-tight sm:px-3`} style={{ textAlign: 'center' }}>Pendiente por evaluación</th>
                     <th className={`${TH} whitespace-nowrap px-2 sm:px-3`} style={{ textAlign: 'center' }}>Fecha de cierre</th>
