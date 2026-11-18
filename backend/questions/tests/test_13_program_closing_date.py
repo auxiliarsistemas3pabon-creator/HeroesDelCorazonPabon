@@ -14,6 +14,9 @@ PAST_MESSAGE = ["La fecha de cierre debe ser igual o posterior a la fecha actual
 class ProgramClosingDateTests(APITestCase):
     def setUp(self):
         self.boss = create_user("closing.boss", User.Role.BOSS)
+        # Un grupo de 4 personas: admite hasta 3 usuarios a evaluar (el límite que usan estas pruebas).
+        for n in range(4):
+            create_user(f"closing.p{n}", User.Role.PERSONAL, area="Enfermería")
         self.form = Evaluation.objects.create(name="Desempeño", created_by=self.boss, monthly_limit=3)
         self.client.force_authenticate(self.boss)
 

@@ -48,8 +48,20 @@ describe('detectPrivateMode', () => {
       expect(await chromiumVerdict(run)).toBe('private')
       expect(run).toHaveBeenCalledTimes(3)
     })
-    it('mediciones mezcladas => dudoso', async () => {
-      const run = vi.fn().mockResolvedValueOnce(1.0).mockResolvedValueOnce(1.45).mockResolvedValueOnce(1.0)
+    it('mediciones mezcladas sin 3 privadas seguidas => dudoso (no bloquea)', async () => {
+      const run = vi.fn()
+      for (const value of [1.0, 1.45, 1.0, 1.4, 1.0]) run.mockResolvedValueOnce(value)
+      expect(await chromiumVerdict(run)).toBe('unknown')
+      expect(run).toHaveBeenCalledTimes(5)
+    })
+    it('una primera medición dudosa seguida de 3 privadas => privado', async () => {
+      const run = vi.fn()
+      for (const value of [1.45, 1.0, 0.95, 1.05]) run.mockResolvedValueOnce(value)
+      expect(await chromiumVerdict(run)).toBe('private')
+      expect(run).toHaveBeenCalledTimes(4)
+    })
+    it('una medición inválida termina como dudoso', async () => {
+      const run = vi.fn().mockResolvedValueOnce(1.0).mockResolvedValueOnce(Number.NaN)
       expect(await chromiumVerdict(run)).toBe('unknown')
     })
   })

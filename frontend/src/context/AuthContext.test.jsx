@@ -14,6 +14,7 @@ vi.mock('../lib/realtime', () => ({
 }))
 
 import { AuthProvider, useAuth } from './AuthContext'
+import { randomCredentials } from '../test/credentials'
 
 let ctx
 function Probe() {
@@ -22,7 +23,9 @@ function Probe() {
 }
 
 const renderProvider = () => render(<AuthProvider><Probe /></AuthProvider>)
-const user = { id: 1, username: 'ana', role: 'boss' }
+// Usuario y contraseña generados al azar en cada ejecución (ninguna credencial escrita en el test).
+const credentials = randomCredentials()
+const user = { id: 1, username: credentials.username, role: 'boss' }
 
 describe('AuthProvider', () => {
   beforeEach(() => { realtimeOptions = undefined })
@@ -31,7 +34,7 @@ describe('AuthProvider', () => {
   it('restaura la sesión con /auth/me/', async () => {
     mockApi.mockResolvedValue(user)
     renderProvider()
-    await waitFor(() => expect(screen.getByTestId('state')).toHaveTextContent('ana'))
+    await waitFor(() => expect(screen.getByTestId('state')).toHaveTextContent(user.username))
     expect(realtimeOptions).toBeDefined()
   })
 
@@ -53,7 +56,7 @@ describe('AuthProvider', () => {
       .mockResolvedValueOnce({ detail: 'ok' })
       .mockResolvedValueOnce(user)
     renderProvider()
-    await waitFor(() => expect(screen.getByTestId('state')).toHaveTextContent('ana'))
+    await waitFor(() => expect(screen.getByTestId('state')).toHaveTextContent(user.username))
   })
 
   it('401 y refresh fallido queda anónimo', async () => {
@@ -67,9 +70,9 @@ describe('AuthProvider', () => {
     renderProvider()
     await waitFor(() => expect(screen.getByTestId('state')).toHaveTextContent('anon'))
     let result
-    await act(async () => { result = await ctx.login({ username: 'ana', password: 'x' }) })
+    await act(async () => { result = await ctx.login(credentials) })
     expect(result).toEqual(user)
-    expect(screen.getByTestId('state')).toHaveTextContent('ana')
+    expect(screen.getByTestId('state')).toHaveTextContent(user.username)
   })
 
   it('login sin perfil intenta refresh y /me', async () => {
@@ -80,8 +83,8 @@ describe('AuthProvider', () => {
       .mockResolvedValueOnce(null) // login sin cuerpo
       .mockResolvedValueOnce({ detail: 'ok' }) // refresh
       .mockResolvedValueOnce(user) // me
-    await act(async () => { await ctx.login({ username: 'ana', password: 'x' }) })
-    expect(screen.getByTestId('state')).toHaveTextContent('ana')
+    await act(async () => { await ctx.login(credentials) })
+    expect(screen.getByTestId('state')).toHaveTextContent(user.username)
   })
 
   it('login falla si el refresh no establece la sesión', async () => {
@@ -118,7 +121,7 @@ describe('AuthProvider', () => {
   it('logout limpia el usuario', async () => {
     mockApi.mockResolvedValueOnce(user)
     renderProvider()
-    await waitFor(() => expect(screen.getByTestId('state')).toHaveTextContent('ana'))
+    await waitFor(() => expect(screen.getByTestId('state')).toHaveTextContent(user.username))
     mockApi.mockResolvedValueOnce(null)
     await act(async () => { await ctx.logout() })
     expect(screen.getByTestId('state')).toHaveTextContent('anon')

@@ -9,7 +9,10 @@ const EVALUATIONS = '/questions/evaluations/'
 
 // Cada envío crea una copia independiente del formulario seleccionado. La edición de una
 // programación existente se realiza desde EvaluationsListPage y nunca reutiliza este flujo.
-export function FormProgramPage() {
+// `kind`: 'group' (Grupales, la programación de siempre) o 'self' (Individuales: autoevaluación).
+const TITLES = { group: 'Programar evaluación grupal', self: 'Programar evaluación individual' }
+
+export function FormProgramPage({ kind = 'group' }) {
   const [evaluations, setEvaluations] = useState(null)
   const [staff, setStaff] = useState([])
   const [selected, setSelected] = useState('')
@@ -44,10 +47,13 @@ export function FormProgramPage() {
   return (
     <Card className="max-w-2xl">
       <div className="space-y-4">
-        <h1 className={PAGE_TITLE}>Programar evaluación</h1>
+        <h1 className={PAGE_TITLE}>{TITLES[kind]}</h1>
         {error && <div role="alert" className={ALERT_ERROR}>{error}</div>}
         {notice && <div className={ALERT_OK}>{notice}</div>}
         <p className="text-sm text-app-muted">
+          {kind === 'self'
+            ? 'Autoevaluación: cada colaborador se evalúa a sí mismo una vez, hasta la fecha de cierre. '
+            : ''}
           Cada vez que guardes se creará una evaluación nueva, con identificador, áreas y periodo propios. El formulario seleccionado no se modifica.
         </p>
         {evaluations?.length > 0 && (
@@ -75,12 +81,13 @@ export function FormProgramPage() {
           <div className="border-t border-app pt-4">
             <EvaluationProgramEditor
               // key: reinicia el formulario interno al cambiar la evaluación base.
-              key={`${chosen?.id ?? 'none'}-${formVersion}`}
+              key={`${kind}-${chosen?.id ?? 'none'}-${formVersion}`}
               evaluation={chosen}
               staff={staff}
               onSaved={handleSaved}
               disabled={!chosen}
               createNew
+              kind={kind}
             />
           </div>
         )}

@@ -13,11 +13,28 @@ function isRemovedArea(area) {
   return area.trim().toLocaleLowerCase() === REMOVED_AREA
 }
 
+const MAX_LIMIT = 30
+
+/** Personas del grupo más grande menos 1, con tope de 30 (0 si el grupo no tiene a quién evaluar). */
+export function largestGroupMinusOne(people) {
+  const sizes = {}
+  for (const person of people) {
+    if (person.area && !isRemovedArea(person.area)) sizes[person.area] = (sizes[person.area] ?? 0) + 1
+  }
+  const largest = Math.max(0, ...Object.values(sizes))
+  return Math.max(0, Math.min(largest - 1, MAX_LIMIT))
+}
+
 // Estado y lógica de la "programación" de una evaluación (áreas, modo de selección, cantidad de usuarios y fecha
 // de cierre). El jefe NO designa personas: define si cada colaborador elige a quién evaluar (manual) o si el sistema
 // se lo asigna (aleatoria). FormProgramPage crea una copia independiente; EvaluationsListPage edita una existente.
-export function useEvaluationProgram({ evaluation, staff, onSaved, createNew = false }) {
+// `kind`: 'group' (grupal: cada colaborador evalúa a varias personas de su área) o 'self' (individual:
+// autoevaluación; el formulario llega hasta la fecha de cierre, sin cantidad de usuarios ni modo de selección).
+// Al editar se toma de la programación; al crear lo indica la página (Grupales / Individuales).
+export function useEvaluationProgram({ evaluation, staff, onSaved, createNew = false, kind: requestedKind }) {
   const evaluationId = evaluation?.id ?? null
+  const kind = createNew ? (requestedKind ?? 'group') : (evaluation?.kind ?? 'group')
+  const isSelf = kind === 'self'
   // `selectedAreas === null` significa "todas las áreas" (se envía null al backend); un array vacío, ninguna.
   const availableAreas = [...new Set(staff.map((person) => person.area).filter((area) => area && !isRemovedArea(area)))].sort()
 
@@ -63,10 +80,8 @@ export function useEvaluationProgram({ evaluation, staff, onSaved, createNew = f
     return () => { current = false }
   }, [createNew, evaluationId])
 
-  // Límite mensual: entero entre 1 y 30 (mismo rango que valida el backend).
-  const validLimit = /^[0-9]+$/.test(value) && Number(value) >= 1 && Number(value) <= 30
   // Los *Changed comparan contra lo último guardado; sirven para enviar solo lo modificado y activar el botón Guardar.
-  const limitChanged = saved !== null && Number(value) !== saved
+  const limitChanged = !isSelf && saved !== null && Number(value) !== saved
   const closeDateChanged = savedCloseDate !== null && closeDate !== savedCloseDate
   const randomChanged = savedRandom !== null && randomSelection !== savedRandom
   const areasChanged = savedAreas !== undefined && (
@@ -78,6 +93,12 @@ export function useEvaluationProgram({ evaluation, staff, onSaved, createNew = f
     || (availableAreas.length > 0 && selectedAreas.length === availableAreas.length)
   const scopedStaff = staff.filter((person) => selectedAreas === null || selectedAreas.includes(person.area))
   const scopedEvaluators = evaluators.filter((person) => selectedAreas === null || selectedAreas.includes(person.area))
+  // Máximo de usuarios a evaluar = personas del grupo seleccionado menos 1 (nadie se evalúa a sí mismo).
+  // Con varias áreas manda la más grande (en las pequeñas el sistema ya ajusta a las personas disponibles).
+  // Mismo cálculo que valida el backend (limits.max_monthly_limit), con tope de 30.
+  const maxLimit = largestGroupMinusOne(scopedStaff)
+  // La autoevaluación no tiene cantidad: siempre es 1 (la propia persona).
+  const validLimit = isSelf || (/^[0-9]+$/.test(value) && Number(value) >= 1 && Number(value) <= maxLimit)
   const evaluatorsInvalid = evaluatorIds !== null && evaluatorIds.length === 0
   // Lo que se envía: [] = todos los colaboradores de las áreas.
   const evaluatorsPayload = evaluatorIds ?? []
@@ -129,7 +150,9 @@ export function useEvaluationProgram({ evaluation, staff, onSaved, createNew = f
   async function submit(event) {
     event?.preventDefault?.()
     if (!evaluationId || !validLimit) {
-      setError('Ingresa un número entero de usuarios entre 1 y 30.')
+      setError(maxLimit < 1
+        ? 'El grupo seleccionado no tiene personas para evaluar.'
+        : `Ingresa un número entero de usuarios entre 1 y ${maxLimit} (las personas del grupo menos 1).`)
       return
     }
     if (!closeDate) {
@@ -157,8 +180,9 @@ export function useEvaluationProgram({ evaluation, staff, onSaved, createNew = f
             areas: selectedAreas,
             personal_ids: [],
             evaluator_ids: evaluatorsPayload,
-            monthly_limit: Number(value),
-            random_selection: randomSelection,
+            kind,
+            // Individual: el backend fija 1 y sin selección aleatoria; no se envía cantidad ni modo.
+            ...(isSelf ? {} : { monthly_limit: Number(value), random_selection: randomSelection }),
           },
         })
         setMessage(`Nueva evaluación programada: «${created.name}».`)
@@ -201,7 +225,7 @@ export function useEvaluationProgram({ evaluation, staff, onSaved, createNew = f
     selectedAreas, toggleArea, selectAllAreas,
     scopedStaff, scopedEvaluators, allAreasSelected,
     evaluatorIds, setAllEvaluators, toggleEvaluator, evaluatorsInvalid,
-    validLimit, hasChanges,
+    validLimit, maxLimit, hasChanges, isSelf,
     loading, busy, error, message,
     submit,
   }

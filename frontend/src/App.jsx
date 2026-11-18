@@ -81,11 +81,15 @@ function App() {
           <Route path="/" element={<LoginPage />} />
           <Route element={<Layout />}>
             <Route path="/dashboard" element={<RoleRoute roles={MANAGERS}><DashboardPage /></RoleRoute>} />
-            <Route path="/evaluations" element={<RoleRoute roles={COLLABORATORS}><EvaluationPage /></RoleRoute>} />
+            {/* Colaborador: Evaluar (grupales) y Autoevaluación (individuales). */}
+            <Route path="/evaluations" element={<RoleRoute roles={COLLABORATORS}><EvaluationPage key="group" kind="group" /></RoleRoute>} />
+            <Route path="/self-evaluation" element={<RoleRoute roles={COLLABORATORS}><EvaluationPage key="self" kind="self" /></RoleRoute>} />
             <Route path="/results" element={<RoleRoute roles={MANAGERS}><ResultsPage /></RoleRoute>} />
             <Route path="/evaluations-list" element={<RoleRoute roles={MANAGERS}><EvaluationsListPage /></RoleRoute>} />
             <Route path="/create" element={<RoleRoute roles={MANAGERS}><FormCreatePage /></RoleRoute>} />
-            <Route path="/program" element={<RoleRoute roles={MANAGERS}><FormProgramPage /></RoleRoute>} />
+            {/* Programar evaluación: Grupales (la de siempre) e Individuales (autoevaluación). */}
+            <Route path="/program" element={<RoleRoute roles={MANAGERS}><FormProgramPage key="group" kind="group" /></RoleRoute>} />
+            <Route path="/program/individual" element={<RoleRoute roles={MANAGERS}><FormProgramPage key="self" kind="self" /></RoleRoute>} />
             {/* Solo el superadmin carga datos y administra usuarios; el backend lo exige igualmente */}
             <Route path="/staff" element={<RoleRoute roles={SUPERADMIN}><StaffImportPage /></RoleRoute>} />
             <Route path="/users" element={<RoleRoute roles={SUPERADMIN}><UsersAdminPage /></RoleRoute>} />

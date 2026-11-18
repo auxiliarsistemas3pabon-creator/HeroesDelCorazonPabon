@@ -21,7 +21,12 @@ from common.permissions import MANAGER_ROLES, IsBossOrSuperAdmin, owned_by
 from users.areas import is_removed_area
 from users.models import User
 
-from .limits import evaluation_progress, program_completed, scored_this_month
+from .limits import (
+    evaluation_progress,
+    group_limit_error,
+    program_completed,
+    scored_this_month,
+)
 from .limits import monthly_limit as evaluation_limit
 from .models import Category, Criterion, Evaluation, EvaluationSetting, Question
 from .staff_import import (
@@ -83,6 +88,7 @@ def _evaluation_data(evaluation, with_progress=True):
         "rating_type": evaluation.rating_type,
         "is_available": evaluation.is_available,
         "random_selection": evaluation.random_selection,
+        "kind": evaluation.kind,
         "evaluator_ids": evaluation.evaluator_ids,
         "closes_on": evaluation.closes_on.isoformat() if evaluation.closes_on else None,
         "areas": evaluation.areas,
@@ -131,7 +137,7 @@ def _clean_evaluator_ids(raw, areas):
 
 PAST_CLOSING_DATE = "La fecha de cierre debe ser igual o posterior a la fecha actual."
 PROGRAM_COMPLETED = "Esta programación ya no tiene evaluaciones pendientes: no se puede editar."
-# Campos de la programación; editarlos reinicia la ronda (program_started_at).
+# Campos de la programación (editarlos no reinicia la ronda: solo afecta a lo pendiente).
 PROGRAM_FIELDS = ("closes_on", "areas", "personal_ids", "evaluator_ids", "random_selection")
 
 
@@ -276,7 +282,8 @@ class EvaluationsView(AuditLogMixin, APIView):
 class EvaluationDetailView(AuditLogMixin, APIView):
     """PATCH/DELETE /questions/evaluations/<id>/: edita, cierra o elimina una evaluación sin respuestas.
 
-    El jefe solo modifica sus evaluaciones. Reprogramar inicia una nueva ronda; una evaluación con respuestas
+    El jefe solo modifica sus evaluaciones. Editar la programación no reinicia la ronda (lo ya evaluado se
+    conserva); solo reabrir una evaluación cerrada inicia una ronda nueva. Una evaluación con respuestas
     no puede eliminarse, para preservar el historial.
     """
 
@@ -303,8 +310,10 @@ class EvaluationDetailView(AuditLogMixin, APIView):
             if rating_type not in Evaluation.RatingType.values:
                 return _bad("rating_type", _("Choose quantitative or descriptive ratings."))
             evaluation.rating_type = rating_type
-        # "Reprogramming" (reopening, new closing date, areas or people) stamps program_started_at below, which starts a new
-        # round: collaborators can score the same people again even in the same month (see limits.scored_this_month).
+        # Editar la programación (fecha, áreas, personas, evaluadores, modo) NO reprograma: no se reinicia la ronda,
+        # así que quien ya evaluó sigue contando como realizado y el cambio solo afecta a los pendientes.
+        # Solo reabrir una evaluación cerrada estampa program_started_at e inicia una ronda nueva
+        # (ver limits.scored_this_month).
         reprogrammed = False
         if "is_available" in request.data:
             is_available = bool(request.data["is_available"])
@@ -318,7 +327,6 @@ class EvaluationDetailView(AuditLogMixin, APIView):
             # Al editar la programación la fecha de cierre debe ser hoy o posterior, cambie o no.
             if closes_on is not None and closes_on < timezone.localdate():
                 return _bad("closes_on", PAST_CLOSING_DATE)
-            reprogrammed = reprogrammed or closes_on != evaluation.closes_on
             evaluation.closes_on = closes_on
         if "areas" in request.data:
             areas = request.data["areas"]
@@ -339,7 +347,6 @@ class EvaluationDetailView(AuditLogMixin, APIView):
                 unknown_areas = set(areas) - known_areas
                 if unknown_areas:
                     return _bad("areas", _("Choose areas that exist in the staff list."))
-            reprogrammed = reprogrammed or areas != evaluation.areas
             evaluation.areas = areas
         if "personal_ids" in request.data:
             personal_ids = request.data["personal_ids"]
@@ -360,18 +367,15 @@ class EvaluationDetailView(AuditLogMixin, APIView):
             areas = evaluation.areas
             if any(areas is not None and area not in areas for area in staff.values_list("area", flat=True)):
                 return _bad("personal_ids", _("Choose staff members from the selected areas."))
-            reprogrammed = reprogrammed or personal_ids != evaluation.personal_ids
             evaluation.personal_ids = personal_ids
         if "evaluator_ids" in request.data:
             evaluator_ids = _clean_evaluator_ids(request.data["evaluator_ids"], evaluation.areas)
             if evaluator_ids is None:
                 return _bad("evaluator_ids", _("Choose active collaborators from the selected areas."))
-            reprogrammed = reprogrammed or evaluator_ids != evaluation.evaluator_ids
             evaluation.evaluator_ids = evaluator_ids
         if "random_selection" in request.data:
-            random_selection = bool(request.data["random_selection"])
-            reprogrammed = reprogrammed or random_selection != evaluation.random_selection
-            evaluation.random_selection = random_selection
+            # La autoevaluación no tiene modo de selección: siempre es la propia persona.
+            evaluation.random_selection = bool(request.data["random_selection"]) and evaluation.kind != Evaluation.Kind.SELF
         if reprogrammed:
             evaluation.program_started_at = timezone.now()
         evaluation.save()
@@ -457,19 +461,33 @@ class EvaluationProgramCreateView(AuditLogMixin, APIView):
         if evaluator_ids is None:
             return _bad("evaluator_ids", _("Choose active collaborators from the selected areas."))
 
-        monthly_limit = request.data.get("monthly_limit")
-        if (
-            not isinstance(monthly_limit, int)
-            or isinstance(monthly_limit, bool)
-            or not 1 <= monthly_limit <= EvaluationSetting.MAX_MONTHLY_LIMIT
-        ):
-            return _bad("monthly_limit", _("Enter a whole number between 1 and 30."))
+        kind = request.data.get("kind", Evaluation.Kind.GROUP)
+        if kind not in Evaluation.Kind.values:
+            return _bad("kind", "Elige programación grupal o individual.")
+        if kind == Evaluation.Kind.SELF:
+            # Individual (autoevaluación): el formulario llega hasta la fecha de cierre; cada colaborador se evalúa
+            # a sí mismo una vez, sin cantidad de usuarios ni modo manual/aleatorio.
+            monthly_limit, random_selection, personal_ids = 1, False, []
+        else:
+            monthly_limit = request.data.get("monthly_limit")
+            if (
+                not isinstance(monthly_limit, int)
+                or isinstance(monthly_limit, bool)
+                or not 1 <= monthly_limit <= EvaluationSetting.MAX_MONTHLY_LIMIT
+            ):
+                return _bad("monthly_limit", _("Enter a whole number between 1 and 30."))
+            # Máximo del grupo seleccionado: sus personas menos 1 (nadie se evalúa a sí mismo).
+            limit_error = group_limit_error(monthly_limit, areas)
+            if limit_error:
+                return _bad("monthly_limit", limit_error)
+            random_selection = bool(request.data.get("random_selection", False))
 
         # The copy is a new, independent evaluation (answers are NOT copied); codes get new unique slugs below.
         programmed = Evaluation.objects.create(
             # Copies of a copy still point to the original form, so the base list never shows duplicates.
             source=source.source or source,
             name=source.name,
+            kind=kind,
             rating_type=source.rating_type,
             created_by=request.user,
             is_available=True,
@@ -477,7 +495,7 @@ class EvaluationProgramCreateView(AuditLogMixin, APIView):
             areas=areas,
             personal_ids=personal_ids,
             monthly_limit=monthly_limit,
-            random_selection=bool(request.data.get("random_selection", False)),
+            random_selection=random_selection,
             evaluator_ids=evaluator_ids,
             program_started_at=timezone.now(),
         )

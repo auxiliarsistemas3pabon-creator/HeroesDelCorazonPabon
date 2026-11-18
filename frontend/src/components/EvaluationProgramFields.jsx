@@ -6,8 +6,8 @@ import { useEvaluationProgram } from '../lib/useEvaluationProgram'
 // Se usa con `key={evaluation?.id ?? 'none'}` desde quien la llama: al cambiar de evaluación
 // este componente se remonta entero, así el hook arranca con el estado de la nueva evaluación
 // sin necesitar un efecto que resetee los campos a mano.
-export function EvaluationProgramEditor({ evaluation, staff, onSaved, disabled = false, createNew = false }) {
-  const program = useEvaluationProgram({ evaluation, staff, onSaved, createNew })
+export function EvaluationProgramEditor({ evaluation, staff, onSaved, disabled = false, createNew = false, kind }) {
+  const program = useEvaluationProgram({ evaluation, staff, onSaved, createNew, kind })
   return <EvaluationProgramFields program={program} disabled={disabled} createNew={createNew} />
 }
 
@@ -23,7 +23,7 @@ export function EvaluationProgramFields({ program, disabled = false, createNew =
     selectedAreas, toggleArea, selectAllAreas,
     scopedStaff, scopedEvaluators, allAreasSelected,
     evaluatorIds, setAllEvaluators, toggleEvaluator, evaluatorsInvalid,
-    validLimit, hasChanges,
+    validLimit, maxLimit, hasChanges, isSelf = false,
     loading, busy, error, message,
     submit,
   } = program
@@ -58,7 +58,9 @@ export function EvaluationProgramFields({ program, disabled = false, createNew =
           ))}
         </div>
         <p className="text-xs text-app-muted">
-          Cada colaborador solo podrá evaluar personas de su propia área. «Todas las áreas» habilita la evaluación en todas.
+          {isSelf
+            ? 'Autoevaluación: cada colaborador de las áreas seleccionadas se evalúa a sí mismo. «Todas las áreas» la habilita en todas.'
+            : 'Cada colaborador solo podrá evaluar personas de su propia área. «Todas las áreas» habilita la evaluación en todas.'}
         </p>
       </fieldset>
 
@@ -110,6 +112,8 @@ export function EvaluationProgramFields({ program, disabled = false, createNew =
         <span className="text-xs font-normal text-app-muted">La evaluación se cerrará al finalizar ese día.</span>
       </label>
 
+      {/* Individual (autoevaluación): el formulario termina en la fecha de cierre; no hay modo ni cantidad. */}
+      {!isSelf && <>
       <fieldset className="grid gap-2" disabled={fieldsDisabled}>
         <legend className={LABEL}>Selección de usuarios</legend>
         <label className="flex items-center gap-2 rounded-lg border border-app px-3 py-2.5 text-sm text-app">
@@ -143,7 +147,7 @@ export function EvaluationProgramFields({ program, disabled = false, createNew =
           className={FIELD}
           type="number"
           min="1"
-          max="30"
+          max={maxLimit || undefined}
           step="1"
           value={value}
           placeholder={disabled ? 'Selecciona una evaluación primero' : ''}
@@ -155,8 +159,13 @@ export function EvaluationProgramFields({ program, disabled = false, createNew =
           {randomSelection
             ? 'Cantidad fija de usuarios que el sistema asigna a cada colaborador; no se puede modificar.'
             : 'Cantidad de usuarios que cada colaborador debe evaluar.'}
+          {' '}
+          {maxLimit > 0
+            ? `Máximo ${maxLimit}: las personas del grupo seleccionado menos 1.`
+            : 'El grupo seleccionado no tiene personas para evaluar.'}
         </span>
       </label>
+      </>}
 
       <div className="flex justify-end">
         <Button type="submit" disabled={fieldsDisabled || !validLimit || evaluatorsInvalid || !hasChanges}>

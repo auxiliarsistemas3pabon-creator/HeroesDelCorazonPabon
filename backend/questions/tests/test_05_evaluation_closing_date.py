@@ -3,7 +3,7 @@ from rest_framework.test import APITestCase
 from users.models import User
 
 from ..models import Evaluation
-from .helpers import PASSWORD, create_user
+from .helpers import create_user
 
 
 class EvaluationClosingDateTests(APITestCase):
@@ -48,15 +48,7 @@ class EvaluationClosingDateTests(APITestCase):
         self.assertEqual(closed["status"], "closed")
 
     def test_boss_can_assign_all_selected_or_no_evaluation_areas(self):
-        User.objects.create_user(
-            username="area.demo",
-            email="area.demo@demo.com",
-            password=PASSWORD,
-            first_name="Area",
-            last_name="Demo",
-            role=User.Role.COLLABORATOR,
-            area="Emergency",
-        )
+        create_user("area", User.Role.COLLABORATOR, area="Emergency")
         evaluation = self.client.post(self.EVALUATIONS, {"name": "Áreas"}, format="json").data
         url = f"{self.EVALUATIONS}{evaluation['id']}/"
 

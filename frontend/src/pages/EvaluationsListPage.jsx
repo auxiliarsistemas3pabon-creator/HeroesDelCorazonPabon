@@ -181,6 +181,9 @@ function Row({ evaluation, onSave, busy, expanded, onToggle, onEditProgram }) {
       <tr className="align-top">
         <td className="break-words px-2 py-3 font-semibold text-app sm:px-3">
           {evaluation.name}
+          <small className="block text-xs font-normal text-app-muted">
+            {evaluation.kind === 'self' ? 'Individual · autoevaluación' : 'Grupal'}
+          </small>
         </td>
         {/* areas: null = todas las áreas; si son muchas, la lista se desplaza dentro de la celda. */}
         <td className="break-words px-2 py-3 text-app-muted sm:px-3">

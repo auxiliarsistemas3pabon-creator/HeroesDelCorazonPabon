@@ -22,6 +22,7 @@ from users.models import User
 from .limits import (
     assigned_personal,
     find_evaluation,
+    group_limit_error,
     monthly_limit,
     program_completed,
     scored_this_month,
@@ -422,7 +423,16 @@ class SettingsView(AuditLogMixin, APIView):
                 {"monthly_limit": [_("Enter a whole number between 1 and %(max)s.") % {"max": EvaluationSetting.MAX_MONTHLY_LIMIT}]},
                 status=status.HTTP_400_BAD_REQUEST,
             )
+        if evaluation and evaluation.kind == Evaluation.Kind.SELF and value != 1:
+            return Response(
+                {"monthly_limit": ["La autoevaluación es siempre de 1 (la propia persona)."]},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
         if evaluation:
+            # Máximo del grupo de la programación: sus personas menos 1 (la autoevaluación ya quedó validada arriba).
+            limit_error = None if evaluation.kind == Evaluation.Kind.SELF else group_limit_error(value, evaluation.areas)
+            if limit_error:
+                return Response({"monthly_limit": [limit_error]}, status=status.HTTP_400_BAD_REQUEST)
             evaluation.monthly_limit = value
             evaluation.save(update_fields=["monthly_limit"])
         else:

@@ -1,4 +1,4 @@
-import { ClipboardList, List, ListPlus, LayoutDashboard, LogOut, Menu, Trophy, User, Users, X } from 'lucide-react'
+import { ClipboardList, List, ListPlus, LayoutDashboard, LogOut, Menu, Trophy, User, UserCheck, Users, X } from 'lucide-react'
 import { useState } from 'react'
 import { Link, NavLink, Navigate, Outlet } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
@@ -12,7 +12,15 @@ const BOSS_LINKS = [
   { to: '/dashboard', label: 'Dashboard', icon: LayoutDashboard, end: true },
   { to: '/results', label: 'Resultados', icon: Trophy },
   { to: '/create', label: 'Crear Evaluacion', icon: ListPlus },
-  { to: '/program', label: 'Programar evaluación', icon: ListPlus },
+  // Submenú: Grupales (la programación de siempre) e Individuales (autoevaluación).
+  {
+    label: 'Programar evaluación',
+    icon: ListPlus,
+    children: [
+      { to: '/program', label: 'Grupales', end: true },
+      { to: '/program/individual', label: 'Individuales' },
+    ],
+  },
   { to: '/evaluations-list', label: 'Lista de evaluaciones', icon: List },
 ]
 
@@ -22,6 +30,7 @@ const LINKS = {
   superadmin: [...BOSS_LINKS, { to: '/users', label: 'Usuarios', icon: Users }, { to: '/staff', label: 'Cargar datos', icon: Users }],
   collaborator: [
     { to: '/evaluations', label: 'Evaluar', icon: ClipboardList },
+    { to: '/self-evaluation', label: 'Autoevaluación', icon: UserCheck },
   ],
 }
 
@@ -120,7 +129,33 @@ export function Layout() {
             </button>
           </div>
           <nav className="flex flex-col gap-1 p-3">
-            {(LINKS[user.role] ?? []).map(({ to, label, icon: Icon, end }) => (
+            {(LINKS[user.role] ?? []).map(({ to, label, icon: Icon, end, children }) => children ? (
+              // Entrada con submenú: el título agrupa y cada hija es un enlace propio.
+              <div key={label} role="group" aria-label={label}>
+                <div className="flex items-center gap-3 px-3 py-2.5 text-sm font-medium text-app">
+                  <Icon size={18} />
+                  <span>{label}</span>
+                </div>
+                <div className="ml-6 flex flex-col gap-1 border-l border-app pl-3">
+                  {children.map((child) => (
+                    <NavLink
+                      key={child.to}
+                      to={child.to}
+                      end={child.end}
+                      onClick={() => setOpen(false)}
+                      className={({ isActive }) =>
+                        cn(
+                          'rounded-lg px-3 py-2 text-sm font-medium transition',
+                          isActive ? 'bg-primary/10 text-primary' : 'text-app hover:bg-app-muted',
+                        )
+                      }
+                    >
+                      {child.label}
+                    </NavLink>
+                  ))}
+                </div>
+              </div>
+            ) : (
               <NavLink
                 key={to}
                 to={to}

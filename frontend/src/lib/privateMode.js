@@ -6,9 +6,10 @@
 //     Medido en Chrome 157 y Edge (mediana de 15 rondas, 5 repeticiones): normal 2.5-11.7 (con o sin
 //     carga de CPU/disco), privado 0.6-1.6. La cuota de almacenamiento ya NO sirve: desde Chrome ~152
 //     es la misma constante en ventana normal e incógnito.
-//     Salvaguardas: 3 mediciones y solo se bloquea si las 3 son claramente privadas; cualquier
-//     medición claramente normal o dudosa deja pasar; y un navegador con una marca de más de 24 h
-//     (el incógnito borra su almacenamiento al cerrarse) es normal sin medir nada.
+//     Salvaguardas: hasta 5 mediciones y solo se bloquea si las 3 últimas seguidas son claramente
+//     privadas; una medición claramente normal deja pasar al instante y un resultado dudoso no bloquea;
+//     un navegador con una marca de más de 24 h (el incógnito borra su almacenamiento al cerrarse) es
+//     normal sin medir nada.
 //   - Firefox privado: OPFS rechazado con "Security error".
 //   - Safari privado: OPFS rechazado con "unknown transient reason".
 // No es una garantía: es una heurística conservadora. El servidor revalida el aviso `private_mode`.
@@ -60,7 +61,10 @@ export function isLongKnownBrowser(now = Date.now()) {
 // --- Tiempos de IndexedDB (Chromium) ------------------------------------------------------------
 export const PRIVATE_BELOW = 1.25 // todas las medianas por debajo: privado
 export const NORMAL_ABOVE = 1.6 //   alguna mediana por encima: normal
+// Privado solo con RUNS mediciones seguidas claramente privadas; hasta MAX_RUNS si alguna sale dudosa
+// (la primera medición de un navegador recién abierto suele ser ruidosa).
 const RUNS = 3
+const MAX_RUNS = 5
 const ROUNDS = 15
 const WRITES = 15
 // Presupuesto total de medición; si se agota (equipo muy cargado) el detector se abstiene.
@@ -70,7 +74,8 @@ const TIME_LIMIT_MS = 4000
 export function classifyMedians(medians) {
   if (!medians.length || medians.some((m) => !Number.isFinite(m))) return 'unknown'
   if (medians.some((m) => m > NORMAL_ABOVE)) return 'normal'
-  if (medians.length >= RUNS && medians.every((m) => m < PRIVATE_BELOW)) return 'private'
+  const last = medians.slice(-RUNS)
+  if (last.length === RUNS && last.every((m) => m < PRIVATE_BELOW)) return 'private'
   return 'unknown'
 }
 
@@ -119,12 +124,15 @@ async function measureRun(db, deadline) {
 /** Veredicto Chromium; `runMeasurement` es inyectable para las pruebas. */
 export async function chromiumVerdict(runMeasurement) {
   const medians = []
-  for (let i = 0; i < RUNS; i++) {
-    medians.push(await runMeasurement())
+  for (let i = 0; i < MAX_RUNS; i++) {
+    const value = await runMeasurement()
+    if (!Number.isFinite(value)) return 'unknown'
+    medians.push(value)
     const verdict = classifyMedians(medians)
-    if (verdict === 'normal') return verdict // una medición claramente normal basta para dejar pasar
+    // Una medición claramente normal basta para dejar pasar; privado exige RUNS seguidas.
+    if (verdict !== 'unknown') return verdict
   }
-  return classifyMedians(medians)
+  return 'unknown'
 }
 
 async function chromiumIsPrivate() {

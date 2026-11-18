@@ -10,7 +10,9 @@
   var TRUSTED_AGE_MS = 24 * 60 * 60 * 1000
   var PRIVATE_BELOW = 1.25
   var NORMAL_ABOVE = 1.6
+  // Privado solo con RUNS mediciones seguidas claramente privadas; hasta MAX_RUNS si alguna sale dudosa.
   var RUNS = 3
+  var MAX_RUNS = 5
   var ROUNDS = 15
   var WRITES = 15
   var TIME_LIMIT_MS = 4000
@@ -46,7 +48,7 @@
     for (i = 0; i < medians.length; i++) if (!isFinite(medians[i])) return 'unknown'
     for (i = 0; i < medians.length; i++) if (medians[i] > NORMAL_ABOVE) return 'normal'
     if (medians.length < RUNS) return 'unknown'
-    for (i = 0; i < medians.length; i++) if (!(medians[i] < PRIVATE_BELOW)) return 'unknown'
+    for (i = medians.length - RUNS; i < medians.length; i++) if (!(medians[i] < PRIVATE_BELOW)) return 'unknown'
     return 'private'
   }
 
@@ -111,10 +113,13 @@
           }
           var medians = []
           function step() {
-            if (medians.length === RUNS) return finish(classify(medians) === 'private')
+            if (medians.length === MAX_RUNS) return finish(false) // sin veredicto claro: no se bloquea
             return measureRun().then(function (median) {
+              if (!isFinite(median)) return finish(false)
               medians.push(median)
-              if (classify(medians) === 'normal') return finish(false)
+              var verdict = classify(medians)
+              // Una medición claramente normal deja pasar al instante; privado exige RUNS seguidas.
+              if (verdict !== 'unknown') return finish(verdict === 'private')
               return step()
             })
           }
@@ -178,10 +183,14 @@
       if (!isPrivate) return release()
       blocked = true
       done = true
-      status.className = 'errornote'
-      status.setAttribute('role', 'alert')
-      status.textContent = MESSAGE
       setLocked(form, true)
+      // Ventana privada: no queda nada del login (ni encabezado ni formulario), solo el aviso,
+      // igual que el login del frontend y los endpoints de la API.
+      var notice = document.createElement('p')
+      notice.className = 'errornote hdc-private-notice'
+      notice.setAttribute('role', 'alert')
+      notice.textContent = MESSAGE
+      document.body.replaceChildren(notice)
       if (window.console) console.warn('Permiso no autorizado')
     }, function () {
       window.clearTimeout(fallback)

@@ -6,5 +6,6 @@
   El script es un archivo estático (la CSP del backend no permite scripts en línea).
 {% endcomment %}
 {% block extrahead %}{{ block.super }}
+<link rel="stylesheet" href="{% static 'security/admin-login.css' %}">
 <script src="{% static 'security/private-window.js' %}" defer></script>
 {% endblock %}

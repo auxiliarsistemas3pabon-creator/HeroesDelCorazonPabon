@@ -1,14 +1,46 @@
 import random
+from collections import Counter
 
 from django.utils import timezone
 
+from users.areas import is_removed_area
 from users.models import User
 
 from .models import Evaluation, EvaluationSetting, Question
 
 
+def max_monthly_limit(areas):
+    """Most people one collaborator can be asked to score: size of the largest selected group minus themselves.
+
+    `areas` None means every area. Each collaborator only scores people of their own area (never themselves),
+    so in a group of N people nobody can have more than N - 1 to evaluate. Also capped at MAX_MONTHLY_LIMIT.
+    Returns 0 when no selected group has anyone to evaluate.
+    """
+    sizes = Counter(
+        area
+        for area in User.objects.filter(role__in=[User.Role.COLLABORATOR, User.Role.PERSONAL], is_active=True)
+        .exclude(area="")
+        .values_list("area", flat=True)
+        if not is_removed_area(area) and (areas is None or area in areas)
+    )
+    largest = max(sizes.values(), default=0)
+    return max(0, min(largest - 1, EvaluationSetting.MAX_MONTHLY_LIMIT))
+
+
+def group_limit_error(value, areas):
+    """Message when `value` exceeds the group maximum (None when it fits)."""
+    maximum = max_monthly_limit(areas)
+    if maximum < 1:
+        return "El grupo seleccionado no tiene personas para evaluar."
+    if value > maximum:
+        return f"El máximo para el grupo seleccionado es {maximum} (las personas del grupo menos 1)."
+    return None
+
+
 def monthly_limit(evaluation=None):
     """How many colleagues a collaborator can score per month in this evaluation."""
+    if evaluation is not None and evaluation.kind == Evaluation.Kind.SELF:
+        return 1  # autoevaluación: una sola, la propia
     if evaluation is not None:
         # A per-evaluation value wins; otherwise use the configurable global default.
         # Always clamped to 1..MAX so a bad stored value can never block everyone or allow unlimited answers.
@@ -94,15 +126,20 @@ def evaluation_progress(evaluation):
         scored.setdefault(collaborator_id, set()).add(personal_id)
 
     limit = monthly_limit(evaluation)
+    self_evaluation = evaluation.kind == Evaluation.Kind.SELF
     total = done = 0
     missing = []
     for evaluator in evaluators:
-        eligible = {
-            person["pk"] for person in people
-            if person["area"] == evaluator["area"] and person["pk"] != evaluator["pk"]
-            and (not evaluation.personal_ids or person["pk"] in evaluation.personal_ids)
-        }
-        quota = min(limit, len(eligible))
+        if self_evaluation:
+            # Autoevaluación: cada colaborador se evalúa a sí mismo una vez.
+            eligible = {evaluator["pk"]}
+        else:
+            eligible = {
+                person["pk"] for person in people
+                if person["area"] == evaluator["area"] and person["pk"] != evaluator["pk"]
+                and (not evaluation.personal_ids or person["pk"] in evaluation.personal_ids)
+            }
+        quota = 1 if self_evaluation else min(limit, len(eligible))
         made = min(len(scored.get(evaluator["pk"], set()) & eligible), quota)
         total += quota
         done += made

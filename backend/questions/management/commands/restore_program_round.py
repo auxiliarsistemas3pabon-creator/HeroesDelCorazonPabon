@@ -5,10 +5,11 @@ from questions.models import Evaluation
 
 
 class Command(BaseCommand):
-    """Deshace el reinicio de ronda que provoca editar una programación, sin borrar la programación.
+    """Deshace un reinicio de ronda, sin borrar la programación.
 
-    Editar fecha, áreas o personas estampa `program_started_at` y empieza una ronda nueva: las evaluaciones
-    ya realizadas dejan de contar. Este comando devuelve el inicio de la ronda al momento en que se creó la
+    Antes, editar fecha, áreas o personas estampaba `program_started_at` y empezaba una ronda nueva (las
+    evaluaciones ya realizadas dejaban de contar); hoy solo lo hace reabrir una evaluación cerrada.
+    Este comando devuelve el inicio de la ronda al momento en que se creó la
     programación, de modo que vuelven a contar. Los demás campos (fecha, áreas, personas, límite) se mantienen
     como están: no existe historial de sus valores anteriores.
 

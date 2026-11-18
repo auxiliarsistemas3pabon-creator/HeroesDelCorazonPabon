@@ -3,12 +3,16 @@ from django.test import SimpleTestCase
 from rest_framework.test import APIClient, APITestCase
 
 from common.security import looks_malicious
+from common.testing import random_password, username_for
 
 from .devices import device_cookie_name
 from .models import TrustedDevice, User
 from .tests import PASSWORD, create_user
 
 LOGIN = "/api/v1/auth/login/"
+# Generadas al azar en cada ejecución (ninguna contraseña escrita en los tests).
+NEW_PASSWORD = random_password()
+WRONG_PASSWORD = random_password()
 
 
 class MaliciousInputDetectionTests(SimpleTestCase):
@@ -88,7 +92,7 @@ class EndpointNavigationGateTests(APITestCase):
         self.assertNotContains(response, "api-gate.js")
 
     def test_only_reads_are_intercepted(self):
-        response = self.client.post(LOGIN, {"username": "nadie", "password": "x"}, format="json", **self.NAVIGATION)
+        response = self.client.post(LOGIN, {"username": username_for("nadie"), "password": WRONG_PASSWORD}, format="json", **self.NAVIGATION)
         self.assertNotEqual(response["Content-Type"].split(";")[0], "text/html")
 
 
@@ -101,14 +105,14 @@ class LoginSecurityTests(APITestCase):
 
     def test_unknown_user_gets_user_not_found(self):
         with self.assertLogs("django.security", "WARNING") as logs:
-            r = self.post("nadie.registrado", PASSWORD)
+            r = self.post(username_for("nadie.registrado"), PASSWORD)
         self.assertEqual(r.status_code, 401)
         self.assertEqual(r.data["code"], "user_not_found")
         self.assertIn("PERMISO NO AUTORIZADO", logs.output[0])
         self.assertNotIn("access_token", r.cookies)
 
     def test_wrong_password_for_registered_user_is_unauthorized_access(self):
-        r = self.post("colab.demo", "clave-que-no-existe")
+        r = self.post(username_for("colab.demo"), WRONG_PASSWORD)
         self.assertEqual(r.status_code, 401)
         self.assertEqual(r.data["code"], "unauthorized_access")
         self.assertEqual(r.data["detail"], "Acceso no autorizado.")
@@ -117,7 +121,7 @@ class LoginSecurityTests(APITestCase):
     def test_inactive_user_cannot_login(self):
         self.user.is_active = False
         self.user.save()
-        r = self.post("colab.demo", PASSWORD)
+        r = self.post(username_for("colab.demo"), PASSWORD)
         self.assertEqual(r.status_code, 401)
 
     def _admin_client(self):
@@ -126,23 +130,23 @@ class LoginSecurityTests(APITestCase):
         return client
 
     def test_password_reset_only_changes_password_and_user_can_login(self):
-        r = self._admin_client().patch(f"/api/v1/users/admin/{self.user.pk}/", {"new_password": "Nueva-Clave-2026*"}, format="json")
+        r = self._admin_client().patch(f"/api/v1/users/admin/{self.user.pk}/", {"new_password": NEW_PASSWORD}, format="json")
         self.assertEqual(r.status_code, 200)
         self.assertTrue(r.data["is_active"])
-        login = self.post("colab.demo", "Nueva-Clave-2026*")
+        login = self.post(username_for("colab.demo"), NEW_PASSWORD)
         self.assertEqual(login.status_code, 200)
         self.assertIn("access_token", login.cookies)
         # La clave anterior deja de servir y el no registrado sigue sin acceso.
-        self.assertEqual(APIClient().post(LOGIN, {"username": "colab.demo", "password": PASSWORD}, format="json").status_code, 401)
-        self.assertEqual(self.post("nadie.registrado", "Nueva-Clave-2026*").data["code"], "user_not_found")
+        self.assertEqual(APIClient().post(LOGIN, {"username": username_for("colab.demo"), "password": PASSWORD}, format="json").status_code, 401)
+        self.assertEqual(self.post(username_for("nadie.registrado"), NEW_PASSWORD).data["code"], "user_not_found")
 
     def test_password_reset_does_not_reactivate_disabled_account(self):
         self.user.is_active = False
         self.user.save()
-        r = self._admin_client().patch(f"/api/v1/users/admin/{self.user.pk}/", {"new_password": "Nueva-Clave-2026*"}, format="json")
+        r = self._admin_client().patch(f"/api/v1/users/admin/{self.user.pk}/", {"new_password": NEW_PASSWORD}, format="json")
         self.assertEqual(r.status_code, 200)
         self.assertFalse(r.data["is_active"])
-        self.assertEqual(self.post("colab.demo", "Nueva-Clave-2026*").status_code, 401)
+        self.assertEqual(self.post(username_for("colab.demo"), NEW_PASSWORD).status_code, 401)
 
     def test_disabled_account_cannot_be_reactivated(self):
         self.user.is_active = False
@@ -166,15 +170,15 @@ class LoginSecurityTests(APITestCase):
         self.assertEqual(r.status_code, 403)
 
     def test_password_with_symbols_is_not_flagged(self):
-        r = self.post("colab.demo", "' OR 1=1 --")
+        r = self.post(username_for("colab.demo"), "' OR 1=1 --")
         self.assertEqual(r.status_code, 401)  # rechazada por clave incorrecta, no por el filtro
 
     def test_oversized_or_missing_fields_are_rejected(self):
         self.assertEqual(self.post("a" * 500, PASSWORD).status_code, 400)
-        self.assertEqual(self.client.post(LOGIN, {"username": "x"}, format="json").status_code, 400)
+        self.assertEqual(self.client.post(LOGIN, {"username": username_for("x")}, format="json").status_code, 400)
 
     def test_private_mode_is_rejected(self):
-        r = self.post("colab.demo", PASSWORD, private_mode=True)
+        r = self.post(username_for("colab.demo"), PASSWORD, private_mode=True)
         self.assertEqual(r.status_code, 403)
         self.assertEqual(r.data["code"], "private_mode")
         self.assertNotIn("access_token", r.cookies)
@@ -185,14 +189,14 @@ class DeviceSessionTests(APITestCase):
         self.user = create_user("colab.demo")
 
     def login(self, client):
-        return client.post(LOGIN, {"username": "colab.demo", "password": PASSWORD}, format="json")
+        return client.post(LOGIN, {"username": username_for("colab.demo"), "password": PASSWORD}, format="json")
 
     def test_registered_user_on_new_device_is_allowed_and_device_registered(self):
         r = self.login(self.client)
         self.assertEqual(r.status_code, 200)
         self.assertTrue(r.cookies[device_cookie_name(self.user.pk)]["httponly"])
         self.assertEqual(TrustedDevice.objects.filter(user=self.user).count(), 1)
-        self.assertEqual(self.client.get("/api/v1/auth/me/").data["username"], "colab.demo")
+        self.assertEqual(self.client.get("/api/v1/auth/me/").data["username"], username_for("colab.demo"))
 
     def test_same_device_reuses_registration(self):
         self.login(self.client)
@@ -209,7 +213,7 @@ class DeviceSessionTests(APITestCase):
         # Equipo compartido: cada cuenta guarda su propia cookie de dispositivo, nadie pisa a nadie.
         create_user("otra.demo")
         self.assertEqual(self.login(self.client).status_code, 200)
-        r = self.client.post(LOGIN, {"username": "otra.demo", "password": PASSWORD}, format="json")
+        r = self.client.post(LOGIN, {"username": username_for("otra.demo"), "password": PASSWORD}, format="json")
         self.assertEqual(r.status_code, 200)
         self.assertEqual(self.login(self.client).status_code, 200)
         self.assertEqual(TrustedDevice.objects.filter(revoked=False).count(), 2)
@@ -258,5 +262,5 @@ class DeviceSessionTests(APITestCase):
 
     def test_lockout_does_not_block_owner_with_correct_password(self):
         for _ in range(6):
-            self.client.post(LOGIN, {"username": "colab.demo", "password": "mala"}, format="json")
+            self.client.post(LOGIN, {"username": username_for("colab.demo"), "password": WRONG_PASSWORD}, format="json")
         self.assertEqual(self.login(self.client).status_code, 200)

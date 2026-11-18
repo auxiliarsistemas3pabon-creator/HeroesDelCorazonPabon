@@ -4,12 +4,14 @@ import { ratingScale } from '../lib/ratingScales'
 import { Button } from '../components/ui/Button'
 import { Card } from '../components/ui/Card'
 import { ALERT_ERROR, ALERT_OK, PAGE_SUBTITLE, PAGE_TITLE } from '../components/ui/styles'
+import { useAuth } from '../context/AuthContext'
 import { api, errorMessage } from '../lib/api'
 import { cn } from '../lib/cn'
 import { formatDay } from '../lib/dates'
 
 // Formulario de UNA evaluación: el colaborador elige los compañeros de su área que el jefe habilita cada mes y los califica.
 function EvaluationForm({ evaluation, onBack }) {
+  const me = useAuth()?.user ?? null
   // Todos los endpoints se acotan por evaluación con este querystring.
   const q = `?evaluation=${evaluation.id}`
   const [quota, setQuota] = useState(null)
@@ -38,13 +40,19 @@ function EvaluationForm({ evaluation, onBack }) {
   const max = quota ? Math.max(0, quota.limit - quota.used) : 0
   // Alcance de la evaluación: `areas === null` significa todas las áreas. El jefe no designa personas: en modo manual
   // se listan todas las de su área (el backend ya filtra por área) y en modo aleatorio se usan las asignadas.
-  const scopedPeople = people.filter((person) => evaluation.areas === null || evaluation.areas.includes(person.area))
+  // Autoevaluación (programación individual): la única persona a evaluar es el propio colaborador.
+  const isSelf = evaluation.kind === 'self'
+  const scopedPeople = isSelf
+    ? (me ? [me] : [])
+    : people.filter((person) => evaluation.areas === null || evaluation.areas.includes(person.area))
   const available = quota ? scopedPeople.filter((p) => !quota.personal.includes(p.id)) : []
   // Selección aleatoria: el sistema le asigna a este colaborador sus personas (quota.assigned) y no puede cambiarlas.
-  // Selección manual: el colaborador elige entre las personas de su área.
-  const fixedPeople = evaluation.random_selection && quota?.assigned
-    ? available.filter((p) => quota.assigned.includes(p.id)).slice(0, max)
-    : null
+  // Selección manual: el colaborador elige entre las personas de su área. Autoevaluación: fija, él mismo.
+  const fixedPeople = isSelf
+    ? available.slice(0, max)
+    : evaluation.random_selection && quota?.assigned
+      ? available.filter((p) => quota.assigned.includes(p.id)).slice(0, max)
+      : null
   // Selección manual: 23 personas por página; lo marcado se conserva al cambiar de página.
   const PEOPLE_PER_PAGE = 23
   const peopleTotalPages = Math.max(1, Math.ceil(available.length / PEOPLE_PER_PAGE))
@@ -107,7 +115,7 @@ function EvaluationForm({ evaluation, onBack }) {
         {evaluation.closes_on && <p className={PAGE_SUBTITLE}>Puedes responder hasta el {formatDay(evaluation.closes_on)}.</p>}
       </div>
       <p className="text-sm text-app-muted">
-        {`${fixedPeople ? 'Evalúa a las personas que el sistema te asignó y marca' : `Elige ${quota ? max : 0} personas de tu área y marca`} con una X la opción que mejor describa cada criterio. ${ratingScale(evaluation.rating_type).description}`}
+        {`${isSelf ? 'Autoevaluación: califícate a ti mismo y marca' : fixedPeople ? 'Evalúa a las personas que el sistema te asignó y marca' : `Elige ${quota ? max : 0} personas de tu área y marca`} con una X la opción que mejor describa cada criterio. ${ratingScale(evaluation.rating_type).description}`}
       </p>
 
       <form onSubmit={onSubmit} className="space-y-4">
@@ -155,7 +163,8 @@ function EvaluationForm({ evaluation, onBack }) {
         </Card>
 
         {effectiveSelected.map((personId) => {
-          const person = people.find((p) => p.id === personId)
+          // scopedPeople incluye al propio colaborador en la autoevaluación (la lista de compañeros no lo trae).
+          const person = scopedPeople.find((p) => p.id === personId)
           return (
             <Card key={personId}>
               <h3 className="text-base font-semibold text-app">{person.first_name} {person.last_name}</h3>
@@ -184,27 +193,38 @@ function EvaluationForm({ evaluation, onBack }) {
 // Tarjetas por página en el selector de evaluaciones.
 const PAGE_SIZE = 6
 
+// Dos módulos para el colaborador: «Evaluar» (grupales: califica a compañeros de su área) y
+// «Autoevaluación» (individuales: se califica a sí mismo). Cada uno muestra solo las de su tipo.
+const MODULES = {
+  group: { title: 'ESCALA DE VALORACIÓN', empty: 'No hay evaluaciones abiertas en este momento.' },
+  self: { title: 'AUTOEVALUACIÓN', empty: 'No hay autoevaluaciones abiertas en este momento.' },
+}
+
 // El colaborador solo responde las evaluaciones que el jefe dejó abiertas: si hay varias, elige cuál.
-export function EvaluationPage() {
-  const [evaluations, setEvaluations] = useState(null)
+export function EvaluationPage({ kind = 'group' }) {
+  const [all, setAll] = useState(null)
   const [chosen, setChosen] = useState(null)
   const [error, setError] = useState(null)
   const [page, setPage] = useState(1)
+  const texts = MODULES[kind]
 
   useEffect(() => {
     api('/questions/evaluations/')
-      .then(setEvaluations)
+      .then(setAll)
       .catch((e) => setError(errorMessage(e)))
   }, [])
 
   if (error) return <div role="alert" className={ALERT_ERROR}>{error}</div>
-  if (!evaluations) return <p className="text-sm text-app-muted">Cargando...</p>
+  if (!all) return <p className="text-sm text-app-muted">Cargando...</p>
+
+  // Las programaciones sin tipo (anteriores a este cambio) son grupales.
+  const evaluations = all.filter((evaluation) => (evaluation.kind === 'self') === (kind === 'self'))
 
   if (evaluations.length === 0) {
     return (
       <div className="space-y-6">
-        <h1 className={PAGE_TITLE}>ESCALA DE VALORACIÓN</h1>
-        <Card className="text-app-muted">No hay evaluaciones abiertas en este momento.</Card>
+        <h1 className={PAGE_TITLE}>{texts.title}</h1>
+        <Card className="text-app-muted">{texts.empty}</Card>
       </div>
     )
   }
@@ -225,7 +245,7 @@ export function EvaluationPage() {
   return (
     <div className="space-y-6">
       <div>
-        <h1 className={PAGE_TITLE}>ESCALA DE VALORACIÓN</h1>
+        <h1 className={PAGE_TITLE}>{texts.title}</h1>
         <p className={PAGE_SUBTITLE}>
           {evaluations.length === 1 ? 'Elige la evaluación que vas a responder.' : 'Hay varias evaluaciones abiertas. Elige la que vas a responder.'}
         </p>

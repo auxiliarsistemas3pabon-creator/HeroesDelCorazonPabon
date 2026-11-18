@@ -3,20 +3,22 @@ from unittest.mock import patch
 from django.utils import timezone
 from rest_framework.test import APITestCase
 
+from common.testing import random_password, username_for
 from users.models import User
 
 from .models import Category, Criterion, Evaluation, Question
 
-# All data is fictitious.
-PASSWORD = "Demo-Pass-2026"
+# Generada al azar en cada ejecución.
+PASSWORD = random_password()
 # The 12 questions of the initial form come from the data migration.
 CRITERIA = ["META", "EFECTIVA", "PRODUCTIVIDAD", "IMPLEMENTA", "APRENDIZAJE", "RECEPTIVA", "RESPETA", "ESCUCHA", "FOMENTA", "INTERACCION", "CONOCIMIENTO", "DISPOSICION"]
 ALL_SCORES = {c: 4 for c in CRITERIA}
 
 
-def create_user(username, role, area="Emergency"):
+def create_user(label, role, area="Emergency"):
+    username = username_for(label)
     return User.objects.create_user(
-        username=username, email=f"{username}@demo.com", password=PASSWORD,
+        username=username, email=f"{username}@example.invalid", password=PASSWORD,
         first_name="Demo", last_name="Fictional", role=role, area=area,
     )
 
@@ -159,7 +161,7 @@ class QuestionTests(APITestCase):
         with self.captureOnCommitCallbacks(execute=True):
             self.submit(self.pedro, self.laura, scores)
         self.assertEqual(len(mail.outbox), 1)
-        self.assertEqual(mail.outbox[0].to, ["laura.demo@demo.com"])
+        self.assertEqual(mail.outbox[0].to, [self.laura.email])
         return mail.outbox[0]
 
     def test_email_congratulates_from_4_0_up(self):
@@ -532,8 +534,8 @@ class EvaluationClosingDateTests(APITestCase):
 
     def test_boss_can_assign_all_selected_or_no_evaluation_areas(self):
         User.objects.create_user(
-            username="area.demo",
-            email="area.demo@demo.com",
+            username=username_for("area.demo"),
+            email=f"{username_for('area.demo')}@example.invalid",
             password=PASSWORD,
             first_name="Area",
             last_name="Demo",

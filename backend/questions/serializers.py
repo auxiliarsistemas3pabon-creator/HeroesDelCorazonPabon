@@ -36,11 +36,10 @@ class QuestionCreateSerializer(serializers.Serializer):
     )
     answers = AnswerSerializer(many=True)
 
-    # Same-area rule: collaborators only evaluate active peers of their own area, never themselves.
+    # Same-area rule: collaborators only evaluate active peers of their own area. Evaluating oneself is only
+    # allowed (and required) in a self-evaluation; that depends on the evaluation, so it is checked in validate().
     def validate_personal(self, personal):
         collaborator = self.context["request"].user
-        if personal.pk == collaborator.pk:
-            raise serializers.ValidationError(_("You cannot evaluate yourself."))
         if not collaborator.area or personal.area != collaborator.area:
             raise serializers.ValidationError(_("The collaborator does not belong to your area."))
         return personal
@@ -56,6 +55,11 @@ class QuestionCreateSerializer(serializers.Serializer):
             evaluation.areas is not None and collaborator.area not in evaluation.areas
         ):
             raise serializers.ValidationError({"evaluation": _("This evaluation is not available for your area.")})
+        is_self = attrs["personal"].pk == collaborator.pk
+        if evaluation.kind == Evaluation.Kind.SELF and not is_self:
+            raise serializers.ValidationError({"personal": "En una autoevaluación solo puedes evaluarte a ti mismo."})
+        if evaluation.kind != Evaluation.Kind.SELF and is_self:
+            raise serializers.ValidationError({"personal": _("You cannot evaluate yourself.")})
         if evaluation.personal_ids and attrs["personal"].pk not in evaluation.personal_ids:
             raise serializers.ValidationError({"personal": _("This staff member is not included in the evaluation.")})
         if evaluation.evaluator_ids and collaborator.pk not in evaluation.evaluator_ids:

@@ -6,11 +6,15 @@ from django.test import RequestFactory, SimpleTestCase, TestCase
 from rest_framework.test import APIClient, APITestCase
 
 from common.security import MaliciousInputMiddleware, client_ip, looks_malicious
+from common.testing import random_digits, random_password, username_for
 
 from .models import TrustedDevice, User
 from .tests import PASSWORD, create_user
 
 LOGIN = "/api/v1/auth/login/"
+# Generadas al azar en cada ejecución (ninguna contraseña escrita en los tests).
+NEW_PASSWORD = random_password()
+WRONG_PASSWORD = random_password()
 
 
 def login(client, username):
@@ -21,15 +25,15 @@ def login(client, username):
 
 class ModelTests(TestCase):
     def test_create_superuser_defaults_and_validation(self):
-        admin = User.objects.create_superuser("root", "root@demo.com", PASSWORD, first_name="R", last_name="T")
+        admin = User.objects.create_superuser(username_for("root"), "root@example.invalid", PASSWORD, first_name="R", last_name="T")
         self.assertEqual((admin.role, admin.is_staff, admin.is_superuser), ("superadmin", True, True))
         with self.assertRaises(ValueError):
-            User.objects.create_superuser("r2", None, PASSWORD, is_staff=False)
+            User.objects.create_superuser(username_for("r2"), None, PASSWORD, is_staff=False)
         with self.assertRaises(ValueError):
-            User.objects.create_superuser("r3", None, PASSWORD, is_superuser=False)
+            User.objects.create_superuser(username_for("r3"), None, PASSWORD, is_superuser=False)
 
     def test_str_and_blank_email_normalised(self):
-        user = User.objects.create_user("u1", email="", password=PASSWORD, first_name="A", last_name="B")
+        user = User.objects.create_user(username_for("u1"), email="", password=PASSWORD, first_name="A", last_name="B")
         self.assertIsNone(user.email)
         self.assertEqual(str(user), "u1")
         device = TrustedDevice.objects.create(user=user, token_hash="h")
@@ -135,20 +139,20 @@ class AuthenticationTests(APITestCase):
         from django.core.exceptions import PermissionDenied
 
         with mock.patch("users.views.authenticate", side_effect=PermissionDenied):
-            r = APIClient().post(LOGIN, {"username": "fantasma", "password": "x"}, format="json")
+            r = APIClient().post(LOGIN, {"username": username_for("fantasma"), "password": WRONG_PASSWORD}, format="json")
         self.assertEqual(r.status_code, 403)
 
     def test_device_cookie_for_another_user_is_not_reused(self):
         other = create_user("otro.demo")
         client = APIClient()
-        login(client, "colab.demo")
+        login(client, username_for("colab.demo"))
         # El mismo navegador inicia sesion con otro usuario: se registra otro dispositivo.
-        r = client.post(LOGIN, {"username": "otro.demo", "password": PASSWORD}, format="json")
+        r = client.post(LOGIN, {"username": username_for("otro.demo"), "password": PASSWORD}, format="json")
         self.assertEqual(r.status_code, 200)
         self.assertEqual(TrustedDevice.objects.filter(user=other).count(), 1)
 
     def test_refresh_with_device_mismatch_is_rejected(self):
-        r = login(self.client, "colab.demo")
+        r = login(self.client, username_for("colab.demo"))
         other_browser = APIClient()
         other_browser.cookies["refresh_token"] = r.cookies["refresh_token"].value
         from users.devices import device_cookie_name
@@ -166,7 +170,7 @@ class AdminAndDirectoryViewTests(APITestCase):
         self.colab2 = create_user("colab2.demo", User.Role.COLLABORATOR, area="Cardiologia")
         self.personal = create_user("pers.demo", User.Role.PERSONAL, area="Cardiologia")
         self.client_admin = APIClient()
-        login(self.client_admin, "admin.demo")
+        login(self.client_admin, username_for("admin.demo"))
 
     def patch(self, user, data):
         return self.client_admin.patch(f"/api/v1/users/admin/{user.pk}/", data, format="json")
@@ -174,7 +178,7 @@ class AdminAndDirectoryViewTests(APITestCase):
     def test_list_users_requires_superadmin(self):
         self.assertEqual(self.client_admin.get("/api/v1/users/admin/").status_code, 200)
         boss_client = APIClient()
-        login(boss_client, "boss.demo")
+        login(boss_client, username_for("boss.demo"))
         self.assertEqual(boss_client.get("/api/v1/users/admin/").status_code, 403)
 
     def test_patch_unknown_user(self):
@@ -201,7 +205,7 @@ class AdminAndDirectoryViewTests(APITestCase):
         self.assertEqual(r.status_code, 200)
         self.colab.refresh_from_db()
         self.assertFalse(self.colab.is_active)
-        r = APIClient().post(LOGIN, {"username": "colab.demo", "password": PASSWORD}, format="json")
+        r = APIClient().post(LOGIN, {"username": username_for("colab.demo"), "password": PASSWORD}, format="json")
         self.assertEqual(r.status_code, 401)
 
     def test_last_active_superadmin_is_protected(self):
@@ -211,7 +215,7 @@ class AdminAndDirectoryViewTests(APITestCase):
         # admin2 ya inactivo; cambiar a un tercer admin activo e intentar quitar al unico restante.
         third = create_user("admin3.demo", User.Role.SUPERADMIN)
         client3 = APIClient()
-        login(client3, "admin3.demo")
+        login(client3, username_for("admin3.demo"))
         r = client3.patch(f"/api/v1/users/admin/{self.admin.pk}/", {"is_active": False}, format="json")
         self.assertEqual(r.status_code, 200)  # quedan admin3 activo
         r = client3.patch(f"/api/v1/users/admin/{self.admin.pk}/", {"role": "boss"}, format="json")
@@ -223,23 +227,23 @@ class AdminAndDirectoryViewTests(APITestCase):
         third = create_user("admin3.demo", User.Role.SUPERADMIN)
         # Solo quedan admin y third activos: quitar el rol a third deja a admin => permitido; luego a admin => 400
         client3 = APIClient()
-        login(client3, "admin3.demo")
+        login(client3, username_for("admin3.demo"))
         client3.patch(f"/api/v1/users/admin/{self.admin.pk}/", {"role": "boss"}, format="json")
         r = client3.patch(f"/api/v1/users/admin/{third.pk}/", {"role": "boss"}, format="json")
         self.assertEqual(r.status_code, 400)
 
     def test_password_reset_by_superadmin_clears_lockout(self):
-        r = self.patch(self.colab, {"new_password": "Nueva-Clave-2026!"})
+        r = self.patch(self.colab, {"new_password": NEW_PASSWORD})
         self.assertEqual(r.status_code, 200)
-        r = APIClient().post(LOGIN, {"username": "colab.demo", "password": "Nueva-Clave-2026!"}, format="json")
+        r = APIClient().post(LOGIN, {"username": username_for("colab.demo"), "password": NEW_PASSWORD}, format="json")
         self.assertEqual(r.status_code, 200)
 
     def test_weak_password_rejected(self):
-        self.assertEqual(self.patch(self.colab, {"new_password": "123"}).status_code, 400)
+        self.assertEqual(self.patch(self.colab, {"new_password": random_digits(3)}).status_code, 400)
 
     def test_directories_scoped_by_area_and_role(self):
         boss_client = APIClient()
-        login(boss_client, "boss.demo")
+        login(boss_client, username_for("boss.demo"))
         candidates = boss_client.get("/api/v1/users/staff-candidates/")
         self.assertEqual(candidates.status_code, 200)
         self.assertEqual({p["first_name"] for p in candidates.data}, {"Demo"})
@@ -247,9 +251,9 @@ class AdminAndDirectoryViewTests(APITestCase):
         evaluators = boss_client.get("/api/v1/users/evaluators/")
         self.assertEqual(len(evaluators.data), 2)
         colab_client = APIClient()
-        login(colab_client, "colab.demo")
+        login(colab_client, username_for("colab.demo"))
         mine = colab_client.get("/api/v1/users/collaborators/")
-        self.assertEqual({u["username"] for u in mine.data}, {"colab2.demo", "pers.demo"})
+        self.assertEqual({u["username"] for u in mine.data}, {username_for("colab2.demo"), username_for("pers.demo")})
         self.assertEqual(colab_client.get("/api/v1/users/staff-candidates/").status_code, 403)
 
     def test_collaborators_without_area_returns_empty(self):
@@ -259,32 +263,32 @@ class AdminAndDirectoryViewTests(APITestCase):
         self.assertEqual(client.get("/api/v1/users/collaborators/").data, [])
 
     def test_me_endpoint(self):
-        self.assertEqual(self.client_admin.get("/api/v1/auth/me/").data["username"], "admin.demo")
+        self.assertEqual(self.client_admin.get("/api/v1/auth/me/").data["username"], username_for("admin.demo"))
 
 
 class RegisterValidationTests(APITestCase):
     def setUp(self):
         create_user("admin.demo", User.Role.SUPERADMIN)
         self.client_admin = APIClient()
-        login(self.client_admin, "admin.demo")
+        login(self.client_admin, username_for("admin.demo"))
 
     def register(self, **overrides):
         body = {
-            "username": "nuevo.demo", "first_name": "Nuevo", "last_name": "Demo",
-            "area": "Cardiologia", "position": "Auxiliar", "password": "Clave-Segura-2026!",
+            "username": username_for("nuevo.demo"), "first_name": "Nuevo", "last_name": "Demo",
+            "area": "Cardiologia", "position": "Auxiliar", "password": NEW_PASSWORD,
         }
         body.update(overrides)
         return self.client_admin.post("/api/v1/users/register/", body, format="json")
 
     def test_register_ok_and_duplicate(self):
         self.assertEqual(self.register().status_code, 201)
-        self.assertEqual(self.register(username="NUEVO.demo").status_code, 400)
+        self.assertEqual(self.register(username=username_for(username_for("nuevo.demo")).upper()).status_code, 400)
 
     def test_validations(self):
         self.assertEqual(self.register(username="   ").status_code, 400)
         self.assertEqual(self.register(first_name="   ").status_code, 400)
         self.assertEqual(self.register(last_name="   ").status_code, 400)
         self.assertEqual(self.register(area="Sistema").status_code, 400)
-        self.assertEqual(self.register(password="12345678").status_code, 400)
+        self.assertEqual(self.register(password=random_digits(8)).status_code, 400)
         self.assertEqual(self.register(area="  Sala   Uno ").status_code, 201)
-        self.assertEqual(User.objects.get(username="nuevo.demo").area, "Sala Uno")
+        self.assertEqual(User.objects.get(username=username_for("nuevo.demo")).area, "Sala Uno")

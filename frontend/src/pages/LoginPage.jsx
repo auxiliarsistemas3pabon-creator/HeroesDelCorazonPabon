@@ -40,6 +40,8 @@ export function LoginPage() {
           setPrivateMode(true)
         }
       })
+      // Si el detector falla, nunca se bloquea: el formulario se habilita como en un navegador normal.
+      .catch(() => {})
       .finally(() => {
         window.clearTimeout(fallback)
         if (active) setChecking(false)
@@ -57,8 +59,9 @@ export function LoginPage() {
 
   async function onSubmit(e) {
     e.preventDefault()
+    // Un solo intento a la vez: Enter repetido mientras se valida no envía otra petición de login.
+    if (locked || loading) return
     setError(null)
-    if (locked) return
     setLoading(true)
     try {
       // login devuelve el usuario para decidir el destino sin esperar a que el contexto se actualice.
@@ -69,6 +72,18 @@ export function LoginPage() {
     } finally {
       setLoading(false)
     }
+  }
+
+  // Ventana privada/incógnito: no se muestra nada del login (ni el panel ni el formulario), solo el aviso,
+  // igual que el backend al abrir sus endpoints en una ventana privada.
+  if (privateMode) {
+    return (
+      <main className="min-h-dvh w-full bg-[#fffaf8] p-4">
+        <div role="alert" className={`${ALERT_ERROR} max-w-md`}>
+          No se permite el acceso desde una ventana privada o de incógnito. Usa una ventana normal del navegador.
+        </div>
+      </main>
+    )
   }
 
   return (
@@ -111,11 +126,6 @@ export function LoginPage() {
 
           <form onSubmit={onSubmit} className="flex flex-col gap-2.5">
             {checking && <p role="status" className="text-xs text-app-muted">Verificando navegador…</p>}
-            {privateMode && (
-              <div role="alert" className={ALERT_ERROR}>
-                No se permite el acceso desde una ventana privada o de incógnito. Usa una ventana normal del navegador.
-              </div>
-            )}
             {error && <div role="alert" className={ALERT_ERROR}>{error}</div>}
             <label className={LABEL}>
               Usuario

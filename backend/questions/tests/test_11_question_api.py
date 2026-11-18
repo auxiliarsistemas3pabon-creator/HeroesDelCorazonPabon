@@ -154,7 +154,7 @@ class QuestionTests(APITestCase):
         with self.captureOnCommitCallbacks(execute=True):
             self.submit(self.pedro, self.laura, scores)
         self.assertEqual(len(mail.outbox), 1)
-        self.assertEqual(mail.outbox[0].to, ["laura.demo@demo.com"])
+        self.assertEqual(mail.outbox[0].to, [self.laura.email])
         return mail.outbox[0]
 
     def test_email_congratulates_from_4_0_up(self):

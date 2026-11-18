@@ -12,6 +12,10 @@ class EvaluationProgramCreateTests(APITestCase):
         self.boss = create_user("program.boss", User.Role.BOSS)
         self.emergency = create_user("program.emergency", User.Role.PERSONAL, area="Emergency")
         self.cardiology = create_user("program.cardiology", User.Role.PERSONAL, area="Cardiology")
+        # Grupos de 6 personas: el máximo de usuarios a evaluar es 5 (las personas del grupo menos 1).
+        for area in ("Emergency", "Cardiology"):
+            for n in range(5):
+                create_user(f"program.{area.lower()}.{n}", User.Role.PERSONAL, area=area)
         self.source = Evaluation.objects.create(monthly_limit=3, 
             name="Desempeño",
             created_by=self.boss,

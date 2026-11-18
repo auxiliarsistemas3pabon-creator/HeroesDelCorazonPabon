@@ -45,7 +45,14 @@ class Evaluation(models.Model):
         DESCRIPTIVE_RISK = "descriptive_risk", _("Clinical or technical risk")
         DESCRIPTIVE_COMPLIANCE = "descriptive_compliance", _("Requirements compliance")
 
+    class Kind(models.TextChoices):
+        # Grupal: cada colaborador evalúa a varias personas de su área (monthly_limit, manual o aleatoria).
+        GROUP = "group", _("Group")
+        # Individual: autoevaluación; cada colaborador se evalúa a sí mismo una vez.
+        SELF = "self", _("Self-evaluation")
+
     name = models.CharField(_("Name"), max_length=150)
+    kind = models.CharField(_("Kind"), max_length=8, choices=Kind.choices, default=Kind.GROUP)
     created_by = models.ForeignKey(
         settings.AUTH_USER_MODEL,
         null=True,
