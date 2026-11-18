@@ -6,6 +6,7 @@ hasta que un superadmin libere el dispositivo.
 """
 
 import hashlib
+import hmac
 import secrets
 
 from django.conf import settings
@@ -14,9 +15,16 @@ from django.utils import timezone
 
 from .models import TrustedDevice, User
 
-DEVICE_COOKIE_NAME = "device_id"
+# Una cookie por cuenta: varios usuarios pueden compartir el mismo navegador sin pisarse el dispositivo.
+DEVICE_COOKIE_PREFIX = "did_"
 DEVICE_CLAIM = "did"
 DEVICE_COOKIE_MAX_AGE = 60 * 60 * 24 * 365
+
+
+def device_cookie_name(user_id) -> str:
+    """Nombre de la cookie del dispositivo de una cuenta; derivado con HMAC para no exponer el id del usuario."""
+    digest = hmac.new(settings.SECRET_KEY.encode(), f"device:{user_id}".encode(), hashlib.sha256).hexdigest()
+    return f"{DEVICE_COOKIE_PREFIX}{digest[:20]}"
 
 
 def _hash(raw: str) -> str:
@@ -30,7 +38,7 @@ def _client_ip(request) -> str:
 
 def find_device(request, user_id, device_id=None):
     """Dispositivo activo que corresponde a la cookie de la peticion (o None)."""
-    raw = request.COOKIES.get(DEVICE_COOKIE_NAME)
+    raw = request.COOKIES.get(device_cookie_name(user_id))
     if not raw:
         return None
     qs = TrustedDevice.objects.filter(token_hash=_hash(raw), user_id=user_id, revoked=False)
@@ -77,10 +85,10 @@ def release_devices(user) -> int:
     return TrustedDevice.objects.filter(user=user, revoked=False).update(revoked=True)
 
 
-def set_device_cookie(response, raw):
+def set_device_cookie(response, raw, user_id):
     if raw:
         response.set_cookie(
-            DEVICE_COOKIE_NAME,
+            device_cookie_name(user_id),
             raw,
             max_age=DEVICE_COOKIE_MAX_AGE,
             httponly=True,

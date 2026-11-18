@@ -164,7 +164,7 @@ class LoginView(AuditLogMixin, APIView):
         refresh = RefreshToken.for_user(user)
         refresh[DEVICE_CLAIM] = device.pk
         _set_auth_cookies(response, refresh)
-        set_device_cookie(response, raw_device)
+        set_device_cookie(response, raw_device, user.pk)
         return response
 
 
@@ -211,7 +211,7 @@ class RefreshView(AuditLogMixin, APIView):
         new_refresh = RefreshToken.for_user(user)
         new_refresh[DEVICE_CLAIM] = device.pk
         _set_auth_cookies(response, new_refresh)
-        set_device_cookie(response, raw_device)
+        set_device_cookie(response, raw_device, user.pk)
         return response
 
 

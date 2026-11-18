@@ -151,7 +151,9 @@ class AuthenticationTests(APITestCase):
         r = login(self.client, "colab.demo")
         other_browser = APIClient()
         other_browser.cookies["refresh_token"] = r.cookies["refresh_token"].value
-        other_browser.cookies["device_id"] = "no-es-el-dispositivo"
+        from users.devices import device_cookie_name
+
+        other_browser.cookies[device_cookie_name(r.data["id"])] = "no-es-el-dispositivo"
         self.assertEqual(other_browser.post("/api/v1/auth/refresh/").status_code, 401)
 
 

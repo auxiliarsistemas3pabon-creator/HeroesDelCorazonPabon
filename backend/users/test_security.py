@@ -4,6 +4,7 @@ from rest_framework.test import APIClient, APITestCase
 
 from common.security import looks_malicious
 
+from .devices import device_cookie_name
 from .models import TrustedDevice, User
 from .tests import PASSWORD, create_user
 
@@ -134,7 +135,7 @@ class DeviceSessionTests(APITestCase):
     def test_registered_user_on_new_device_is_allowed_and_device_registered(self):
         r = self.login(self.client)
         self.assertEqual(r.status_code, 200)
-        self.assertTrue(r.cookies["device_id"]["httponly"])
+        self.assertTrue(r.cookies[device_cookie_name(self.user.pk)]["httponly"])
         self.assertEqual(TrustedDevice.objects.filter(user=self.user).count(), 1)
         self.assertEqual(self.client.get("/api/v1/auth/me/").data["username"], "colab.demo")
 
@@ -157,6 +158,15 @@ class DeviceSessionTests(APITestCase):
         self.assertEqual(self.login(APIClient()).status_code, 403)
         # El navegador registrado puede volver a entrar.
         self.assertEqual(self.login(self.client).status_code, 200)
+
+    def test_several_accounts_share_the_same_browser(self):
+        # Equipo compartido: cada cuenta guarda su propia cookie, nadie bloquea a nadie.
+        create_user("otra.demo")
+        self.assertEqual(self.login(self.client).status_code, 200)
+        r = self.client.post(LOGIN, {"username": "otra.demo", "password": PASSWORD}, format="json")
+        self.assertEqual(r.status_code, 200)
+        self.assertEqual(self.login(self.client).status_code, 200)
+        self.assertEqual(TrustedDevice.objects.filter(revoked=False).count(), 2)
 
     def test_rule_applies_to_superadmin(self):
         create_user("super.demo", role=User.Role.SUPERADMIN)
@@ -193,7 +203,7 @@ class DeviceSessionTests(APITestCase):
 
     def test_lost_device_cookie_requires_login_again(self):
         self.login(self.client)
-        del self.client.cookies["device_id"]
+        del self.client.cookies[device_cookie_name(self.user.pk)]
         self.assertEqual(self.client.get("/api/v1/users/collaborators/").status_code, 401)
         self.assertEqual(self.client.post("/api/v1/auth/refresh/").status_code, 401)
 
@@ -233,7 +243,7 @@ class DeviceSessionTests(APITestCase):
         r = self.client.post("/api/v1/auth/refresh/")
         self.assertEqual(r.status_code, 200)
         self.assertEqual(TrustedDevice.objects.count(), 1)
-        self.assertIn("device_id", r.cookies)
+        self.assertIn(device_cookie_name(self.user.pk), r.cookies)
 
     def test_lockout_does_not_block_owner_with_correct_password(self):
         for _ in range(6):
