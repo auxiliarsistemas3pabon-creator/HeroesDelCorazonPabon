@@ -36,14 +36,6 @@ class UserSerializer(serializers.ModelSerializer[User]):
         read_only_fields = ("id", "role", "is_active", "date_joined", "last_login")
 
 
-class AdminUserSerializer(UserSerializer):
-    """Listado del superadmin: indica si la cuenta ya esta ligada a un navegador (dispositivo fijo)."""
-    has_device = serializers.BooleanField(read_only=True)
-
-    class Meta(UserSerializer.Meta):
-        fields = (*UserSerializer.Meta.fields, "has_device")
-
-
 class AuthenticatedUserSerializer(UserSerializer):
     """Usuario autenticado (login/me): anade password_change_required para que el frontend redirija al cambio de clave."""
     password_change_required = serializers.BooleanField(read_only=True)
