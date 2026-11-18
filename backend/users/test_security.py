@@ -119,10 +119,11 @@ class LoginSecurityTests(APITestCase):
         self.assertEqual(self.post("a" * 500, PASSWORD).status_code, 400)
         self.assertEqual(self.client.post(LOGIN, {"username": "x"}, format="json").status_code, 400)
 
-    def test_private_mode_is_rejected(self):
+    def test_private_window_is_not_blocked_but_needs_the_2fa_code(self):
+        # Ya no se bloquea la ventana privada: como no trae el dispositivo de confianza, pide el codigo.
         r = self.post("colab.demo", PASSWORD, private_mode=True)
-        self.assertEqual(r.status_code, 403)
-        self.assertEqual(r.data["code"], "private_mode")
+        self.assertEqual(r.status_code, 200)
+        self.assertTrue(r.data["mfa_required"])
         self.assertNotIn("access_token", r.cookies)
 
 

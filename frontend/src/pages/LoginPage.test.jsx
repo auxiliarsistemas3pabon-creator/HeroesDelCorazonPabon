@@ -5,11 +5,9 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 const mockLogin = vi.fn()
 const mockVerify = vi.fn()
 let mockUser = null
-const mockDetect = vi.fn()
 
 vi.mock('../context/AuthContext', () => ({ useAuth: () => ({ user: mockUser, login: mockLogin, verifyMfa: mockVerify }) }))
 vi.mock('qrcode', () => ({ default: { toDataURL: () => Promise.resolve('data:image/png;base64,QR') } }))
-vi.mock('../lib/privateMode', () => ({ detectPrivateMode: () => mockDetect() }))
 
 import { LoginPage } from './LoginPage'
 
@@ -33,17 +31,16 @@ function fill(username, password) {
 describe('LoginPage', () => {
   beforeEach(() => {
     mockUser = null
-    mockDetect.mockResolvedValue(false)
     vi.spyOn(console, 'warn').mockImplementation(() => {})
   })
 
-  it('un jefe va al dashboard y envía private_mode=false', async () => {
+  it('un jefe va al dashboard', async () => {
     mockLogin.mockResolvedValue({ role: 'boss' })
     renderPage()
     fill('  ana  ', 'clave')
     fireEvent.click(screen.getByRole('button', { name: 'Iniciar sesión' }))
     expect(await screen.findByText('DASHBOARD')).toBeInTheDocument()
-    expect(mockLogin).toHaveBeenCalledWith({ username: 'ana', password: 'clave', private_mode: false })
+    expect(mockLogin).toHaveBeenCalledWith({ username: 'ana', password: 'clave' })
   })
 
   it('un colaborador va a evaluaciones', async () => {
@@ -68,16 +65,6 @@ describe('LoginPage', () => {
     fill('ana', 'mala')
     fireEvent.click(screen.getByRole('button', { name: 'Iniciar sesión' }))
     expect(await screen.findByRole('alert')).toHaveTextContent('Acceso no autorizado.')
-    expect(console.warn).toHaveBeenCalledWith('Permiso no autorizado')
-  })
-
-  it('ventana privada bloquea el formulario', async () => {
-    mockDetect.mockResolvedValue(true)
-    renderPage()
-    expect(await screen.findByText(/ventana privada o de incógnito/)).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: 'Iniciar sesión' })).toBeDisabled()
-    fireEvent.submit(screen.getByRole('button', { name: 'Iniciar sesión' }).closest('form'))
-    expect(mockLogin).not.toHaveBeenCalled()
     expect(console.warn).toHaveBeenCalledWith('Permiso no autorizado')
   })
 

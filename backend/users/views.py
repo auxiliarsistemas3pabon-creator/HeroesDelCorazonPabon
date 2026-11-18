@@ -102,15 +102,6 @@ class LoginView(AuditLogMixin, APIView):
         username = credentials["username"]
         password = credentials["password"]
 
-        # El navegador declara si esta en modo privado/incognito. Es defensa en
-        # profundidad: el bloqueo principal ocurre en el frontend.
-        if request.data.get("private_mode") is True:
-            log_unauthorized(request, "private_mode")
-            return Response(
-                {"detail": _("Private or incognito windows are not allowed. Use a regular browser window."),
-                 "code": "private_mode"},
-                status=status.HTTP_403_FORBIDDEN,
-            )
         if looks_malicious(username):
             log_unauthorized(request, "malicious_username")
             return Response(

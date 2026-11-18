@@ -18,7 +18,6 @@ describe('errorMessage', () => {
     expect(console.warn).toHaveBeenCalledWith('Permiso no autorizado')
   })
   it('modo privado', () => {
-    expect(errorMessage({ status: 403, data: { code: 'private_mode' } })).toMatch(/incógnito/)
   })
   it('mensajes de la doble autenticación', () => {
     expect(errorMessage({ status: 401, data: { code: 'mfa_invalid' } })).toMatch(/Código incorrecto/)
