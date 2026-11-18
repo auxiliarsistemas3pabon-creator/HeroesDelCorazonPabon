@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import { Navigate, useNavigate } from 'react-router-dom'
+import { MfaStep } from '../components/MfaStep'
 import { PasswordInput } from '../components/PasswordInput'
 import { Button } from '../components/ui/Button'
 import { ALERT_ERROR, FIELD, LABEL } from '../components/ui/styles'
@@ -18,12 +19,14 @@ const FEATURES = [
 
 // El usuario ingresa con su identificador; puede cambiar la contraseña voluntariamente desde el menú.
 export function LoginPage() {
-  const { user, login } = useAuth()
+  const { user, login, verifyMfa } = useAuth()
   const navigate = useNavigate()
   const [form, setForm] = useState({ username: '', password: '' })
   const [error, setError] = useState(null)
   const [loading, setLoading] = useState(false)
   const [privateMode, setPrivateMode] = useState(false)
+  // Desafío 2FA pendiente: la contraseña ya se validó, falta el código de la app.
+  const [challenge, setChallenge] = useState(null)
 
   // Las ventanas privadas/incógnito no pueden iniciar sesión: no conservan el dispositivo registrado.
   useEffect(() => {
@@ -48,13 +51,41 @@ export function LoginPage() {
     setLoading(true)
     try {
       // login devuelve el usuario para decidir el destino sin esperar a que el contexto se actualice.
-      const authenticatedUser = await login({ ...form, username: form.username.trim(), private_mode: privateMode })
-      navigate(authenticatedUser.role === 'boss' || authenticatedUser.role === 'superadmin' ? '/dashboard' : '/evaluations', { replace: true })
+      const result = await login({ ...form, username: form.username.trim(), private_mode: privateMode })
+      if (result?.mfa_required) {
+        setChallenge(result)
+        return
+      }
+      goHome(result)
     } catch (err) {
       setError(errorMessage(err, 'Credenciales inválidas'))
     } finally {
       setLoading(false)
     }
+  }
+
+  function goHome(authenticatedUser) {
+    navigate(authenticatedUser.role === 'boss' || authenticatedUser.role === 'superadmin' ? '/dashboard' : '/evaluations', { replace: true })
+  }
+
+  async function onVerify(code) {
+    setError(null)
+    setLoading(true)
+    try {
+      goHome(await verifyMfa(challenge.mfa_token, code))
+    } catch (err) {
+      // Desafío vencido o contraseña cambiada: hay que volver a empezar con la contraseña.
+      if (err?.data?.code === 'mfa_expired') setChallenge(null)
+      setError(errorMessage(err, 'Código incorrecto'))
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  function cancelChallenge() {
+    setChallenge(null)
+    setError(null)
+    setForm((prev) => ({ ...prev, password: '' }))
   }
 
   return (
@@ -95,6 +126,9 @@ export function LoginPage() {
             <p className="mt-0.5 text-xs text-app-muted">Ingresa tus credenciales para continuar.</p>
           </div>
 
+          {challenge ? (
+            <MfaStep challenge={challenge} onVerify={onVerify} onCancel={cancelChallenge} error={error} loading={loading} />
+          ) : (
           <form onSubmit={onSubmit} className="flex flex-col gap-2.5">
             {privateMode && (
               <div role="alert" className={ALERT_ERROR}>
@@ -114,6 +148,7 @@ export function LoginPage() {
               {loading ? 'Ingresando...' : 'Iniciar sesión'}
             </Button>
           </form>
+          )}
         </div>
       </main>
     </div>

@@ -72,6 +72,26 @@ describe('AuthProvider', () => {
     expect(screen.getByTestId('state')).toHaveTextContent('ana')
   })
 
+  it('login con navegador no reconocido devuelve el desafío 2FA sin abrir sesión', async () => {
+    const challenge = { mfa_required: true, mfa_token: 't' }
+    mockApi.mockResolvedValueOnce(null).mockResolvedValueOnce(challenge)
+    renderProvider()
+    await waitFor(() => expect(screen.getByTestId('state')).toHaveTextContent('anon'))
+    let result
+    await act(async () => { result = await ctx.login({ username: 'ana', password: 'x' }) })
+    expect(result).toEqual(challenge)
+    expect(screen.getByTestId('state')).toHaveTextContent('anon')
+  })
+
+  it('verifyMfa valida el código y abre la sesión', async () => {
+    mockApi.mockResolvedValueOnce(null).mockResolvedValueOnce(user)
+    renderProvider()
+    await waitFor(() => expect(screen.getByTestId('state')).toHaveTextContent('anon'))
+    await act(async () => { await ctx.verifyMfa('t', '123456') })
+    expect(mockApi).toHaveBeenLastCalledWith('/auth/mfa/verify/', { method: 'POST', body: { mfa_token: 't', code: '123456' } })
+    expect(screen.getByTestId('state')).toHaveTextContent('ana')
+  })
+
   it('login sin perfil intenta refresh y /me', async () => {
     mockApi.mockResolvedValueOnce(null) // me inicial
     renderProvider()

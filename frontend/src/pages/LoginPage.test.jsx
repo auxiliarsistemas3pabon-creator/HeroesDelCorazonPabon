@@ -3,10 +3,12 @@ import { MemoryRouter, Route, Routes } from 'react-router-dom'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 const mockLogin = vi.fn()
+const mockVerify = vi.fn()
 let mockUser = null
 const mockDetect = vi.fn()
 
-vi.mock('../context/AuthContext', () => ({ useAuth: () => ({ user: mockUser, login: mockLogin }) }))
+vi.mock('../context/AuthContext', () => ({ useAuth: () => ({ user: mockUser, login: mockLogin, verifyMfa: mockVerify }) }))
+vi.mock('qrcode', () => ({ default: { toDataURL: () => Promise.resolve('data:image/png;base64,QR') } }))
 vi.mock('../lib/privateMode', () => ({ detectPrivateMode: () => mockDetect() }))
 
 import { LoginPage } from './LoginPage'
@@ -77,6 +79,55 @@ describe('LoginPage', () => {
     fireEvent.submit(screen.getByRole('button', { name: 'Iniciar sesión' }).closest('form'))
     expect(mockLogin).not.toHaveBeenCalled()
     expect(console.warn).toHaveBeenCalledWith('Permiso no autorizado')
+  })
+
+  it('primer login: muestra el QR y entra al confirmar el código', async () => {
+    mockLogin.mockResolvedValue({ mfa_required: true, mfa_token: 'tok', enrollment: { secret: 'ABCDEF', otpauth_uri: 'otpauth://totp/x' } })
+    mockVerify.mockResolvedValue({ role: 'collaborator' })
+    renderPage()
+    fill('luis', 'clave')
+    fireEvent.click(screen.getByRole('button', { name: 'Iniciar sesión' }))
+    expect(await screen.findByText('Activa la doble autenticación')).toBeInTheDocument()
+    expect(await screen.findByAltText(/Código QR/)).toHaveAttribute('src', 'data:image/png;base64,QR')
+    expect(screen.getByText('ABCDEF')).toBeInTheDocument()
+    fireEvent.change(screen.getByLabelText('Código de verificación'), { target: { value: '12a3456' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Verificar' }))
+    expect(await screen.findByText('EVALUATIONS')).toBeInTheDocument()
+    expect(mockVerify).toHaveBeenCalledWith('tok', '123456')
+  })
+
+  it('navegador no reconocido: pide solo el código y muestra el error si es incorrecto', async () => {
+    mockLogin.mockResolvedValue({ mfa_required: true, mfa_token: 'tok' })
+    mockVerify.mockRejectedValue({ status: 401, data: { code: 'mfa_invalid' } })
+    renderPage()
+    fill('ana', 'clave')
+    fireEvent.click(screen.getByRole('button', { name: 'Iniciar sesión' }))
+    expect(await screen.findByText('Verificación en dos pasos')).toBeInTheDocument()
+    expect(screen.queryByAltText(/Código QR/)).not.toBeInTheDocument()
+    fireEvent.change(screen.getByLabelText('Código de verificación'), { target: { value: '000000' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Verificar' }))
+    expect(await screen.findByRole('alert')).toHaveTextContent('Código incorrecto')
+  })
+
+  it('desafío vencido vuelve al formulario de contraseña', async () => {
+    mockLogin.mockResolvedValue({ mfa_required: true, mfa_token: 'tok' })
+    mockVerify.mockRejectedValue({ status: 401, data: { code: 'mfa_expired' } })
+    renderPage()
+    fill('ana', 'clave')
+    fireEvent.click(screen.getByRole('button', { name: 'Iniciar sesión' }))
+    fireEvent.change(await screen.findByLabelText('Código de verificación'), { target: { value: '123456' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Verificar' }))
+    expect(await screen.findByRole('alert')).toHaveTextContent('venció')
+    expect(screen.getByRole('button', { name: 'Iniciar sesión' })).toBeInTheDocument()
+  })
+
+  it('volver cancela el segundo paso', async () => {
+    mockLogin.mockResolvedValue({ mfa_required: true, mfa_token: 'tok' })
+    renderPage()
+    fill('ana', 'clave')
+    fireEvent.click(screen.getByRole('button', { name: 'Iniciar sesión' }))
+    fireEvent.click(await screen.findByRole('button', { name: 'Volver al inicio de sesión' }))
+    expect(screen.getByRole('button', { name: 'Iniciar sesión' })).toBeInTheDocument()
   })
 
   it('con sesión activa redirige', async () => {
