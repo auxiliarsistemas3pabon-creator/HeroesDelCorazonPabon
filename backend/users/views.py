@@ -7,6 +7,7 @@ from django.contrib.auth import authenticate
 from django.contrib.auth.backends import ModelBackend
 from django.core.exceptions import PermissionDenied
 from django.db import transaction
+from django.db.models import Exists, OuterRef
 from django.middleware.csrf import get_token
 from django.utils.translation import gettext as _
 from rest_framework import generics, status
@@ -25,15 +26,16 @@ from common.security import UNAUTHORIZED_MESSAGE, log_unauthorized, looks_malici
 from .areas import is_removed_area
 from .devices import (
     DEVICE_CLAIM,
-    close_session,
+    DeviceNotAllowed,
     find_device,
-    has_active_session_elsewhere,
-    open_session,
+    has_device,
     register_device,
+    release_devices,
     set_device_cookie,
 )
-from .models import User
+from .models import TrustedDevice, User
 from .serializers import (
+    AdminUserSerializer,
     AuthenticatedUserSerializer,
     LoginSerializer,
     PasswordChangeSerializer,
@@ -146,23 +148,21 @@ class LoginView(AuditLogMixin, APIView):
                 status=status.HTTP_401_UNAUTHORIZED,
             )
 
-        # Una sola sesion a la vez: si sigue abierta en otro navegador (o incognito), se rechaza.
-        if has_active_session_elsewhere(request, user):
-            log_unauthorized(request, "session_active_elsewhere")
+        # Usuario registrado con clave correcta: la sesion queda ligada a su dispositivo fijo.
+        # El primer navegador se registra; cualquier otro (o una ventana privada) se rechaza.
+        try:
+            device, raw_device = register_device(request, user)
+        except DeviceNotAllowed:
+            log_unauthorized(request, "device_not_registered")
             return Response(
-                {"detail": _("This account already has an open session in another browser. Log out there first."),
-                 "code": "session_active"},
+                {"detail": _("This account is linked to another browser. Ask an administrator to release the device."),
+                 "code": "device_not_registered"},
                 status=status.HTTP_403_FORBIDDEN,
             )
-
-        # Usuario registrado con clave correcta: se registra/reutiliza el dispositivo
-        # y la sesion queda ligada a el.
-        device, raw_device = register_device(request, user)
         get_token(request)  # forces the csrftoken cookie for the frontend
         response = Response(AuthenticatedUserSerializer(user).data)
         refresh = RefreshToken.for_user(user)
         refresh[DEVICE_CLAIM] = device.pk
-        open_session(device, refresh)
         _set_auth_cookies(response, refresh)
         set_device_cookie(response, raw_device)
         return response
@@ -198,12 +198,18 @@ class RefreshView(AuditLogMixin, APIView):
         except (TokenError, User.DoesNotExist):
             return Response({"detail": _("Session expired.")}, status=status.HTTP_401_UNAUTHORIZED)
 
-        # Sesiones emitidas antes de esta version no traen dispositivo: se registran aqui.
-        device, raw_device = register_device(request, user)
+        # Sesiones emitidas antes de esta version no traen dispositivo: se registran aqui
+        # (o se cierran si la cuenta ya esta ligada a otro navegador).
+        try:
+            device, raw_device = register_device(request, user)
+        except DeviceNotAllowed:
+            log_unauthorized(request, "device_not_registered")
+            response = Response({"detail": _("Session expired.")}, status=status.HTTP_401_UNAUTHORIZED)
+            _clear_auth_cookies(response)
+            return response
         response = Response({"detail": "ok"})
         new_refresh = RefreshToken.for_user(user)
         new_refresh[DEVICE_CLAIM] = device.pk
-        open_session(device, new_refresh)
         _set_auth_cookies(response, new_refresh)
         set_device_cookie(response, raw_device)
         return response
@@ -218,9 +224,7 @@ class LogoutView(AuditLogMixin, APIView):
         raw = request.COOKIES.get(settings.AUTH_COOKIE_REFRESH_NAME)
         if raw:
             try:
-                token = RefreshToken(raw)
-                close_session(request, token)
-                token.blacklist()
+                RefreshToken(raw).blacklist()
             except TokenError:
                 pass
         response = Response(status=status.HTTP_204_NO_CONTENT)
@@ -254,8 +258,9 @@ class AdminUsersView(AuditLogMixin, APIView):
     permission_classes = [IsSuperAdmin]
 
     def get(self, request):
-        users = User.objects.all().order_by("username")
-        return Response(UserSerializer(users, many=True).data)
+        active_device = TrustedDevice.objects.filter(user=OuterRef("pk"), revoked=False)
+        users = User.objects.annotate(has_device=Exists(active_device)).order_by("username")
+        return Response(AdminUserSerializer(users, many=True).data)
 
     def patch(self, request, user_id):
         try:
@@ -290,7 +295,23 @@ class AdminUsersView(AuditLogMixin, APIView):
         if "is_active" in request.data:
             user.is_active = active
         user.save()
-        return Response(UserSerializer(user).data)
+        user.has_device = has_device(user)
+        return Response(AdminUserSerializer(user).data)
+
+
+class ReleaseDeviceView(AuditLogMixin, APIView):
+    """POST /users/admin/<id>/release-device/: libera el dispositivo fijo de una cuenta.
+
+    Su sesion actual deja de valer y el proximo inicio de sesion registra el navegador que use.
+    """
+    permission_classes = [IsSuperAdmin]
+
+    def post(self, request, user_id):
+        user = User.objects.filter(pk=user_id).first()
+        if user is None:
+            return Response({"detail": _("User not found.")}, status=status.HTTP_404_NOT_FOUND)
+        released = release_devices(user)
+        return Response({"released": released})
 
 
 class StaffImportView(AuditLogMixin, APIView):

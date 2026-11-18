@@ -1,6 +1,6 @@
 /* eslint-disable react-refresh/only-export-components */
 import { createContext, useContext, useEffect, useRef, useState } from 'react'
-import { api } from '../lib/api'
+import { api, SESSION_EXPIRED_EVENT } from '../lib/api'
 import { connectRealtime } from '../lib/realtime'
 
 // Sesión por cookies httpOnly: el front nunca ve los tokens, solo pregunta quién es el usuario.
@@ -46,6 +46,13 @@ export function AuthProvider({ children }) {
 
     restoreSession()
     return () => { active = false }
+  }, [])
+
+  // Sesión validada por el servidor: si deja de reconocerla, se descarta el usuario y las rutas protegidas llevan al login.
+  useEffect(() => {
+    const expire = () => setUser(null)
+    window.addEventListener(SESSION_EXPIRED_EVENT, expire)
+    return () => window.removeEventListener(SESSION_EXPIRED_EVENT, expire)
   }, [])
 
   useEffect(() => {

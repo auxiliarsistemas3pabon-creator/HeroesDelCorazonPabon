@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react'
 import { Navigate, useNavigate } from 'react-router-dom'
 import { PasswordInput } from '../components/PasswordInput'
 import { Button } from '../components/ui/Button'
-import { ALERT_ERROR, FIELD, LABEL } from '../components/ui/styles'
+import { ALERT_ERROR, ALERT_WARN, FIELD, LABEL } from '../components/ui/styles'
 import { useAuth } from '../context/AuthContext'
 import { errorMessage } from '../lib/api'
 import { mediaUrl } from '../lib/media'
@@ -23,21 +23,17 @@ export function LoginPage() {
   const [form, setForm] = useState({ username: '', password: '' })
   const [error, setError] = useState(null)
   const [loading, setLoading] = useState(false)
-  const [privateMode, setPrivateMode] = useState(false)
+  const [storageWarning, setStorageWarning] = useState(false)
 
-  // Las ventanas privadas/incógnito no pueden iniciar sesión: no conservan el dispositivo registrado.
-  // La detección es asíncrona: el envío del formulario la espera para no colarse antes de que termine.
-  const [privateCheck] = useState(() => detectPrivateMode())
+  // Heurística de almacenamiento (no identifica el incógnito con certeza y puede dar falsos positivos):
+  // solo muestra un aviso. El control real lo hace el servidor con el dispositivo fijo de cada cuenta.
   useEffect(() => {
     let active = true
-    privateCheck.then((isPrivate) => {
-      if (active && isPrivate) {
-        console.warn('Permiso no autorizado')
-        setPrivateMode(true)
-      }
+    detectPrivateMode().then((restricted) => {
+      if (active && restricted) setStorageWarning(true)
     })
     return () => { active = false }
-  }, [privateCheck])
+  }, [])
 
   if (user) return <Navigate to={user.role === 'boss' || user.role === 'superadmin' ? '/dashboard' : '/evaluations'} replace />
 
@@ -46,16 +42,10 @@ export function LoginPage() {
   async function onSubmit(e) {
     e.preventDefault()
     setError(null)
-    if (privateMode) return
     setLoading(true)
     try {
-      const isPrivate = await privateCheck
-      if (isPrivate) {
-        setPrivateMode(true)
-        return
-      }
       // login devuelve el usuario para decidir el destino sin esperar a que el contexto se actualice.
-      const authenticatedUser = await login({ ...form, username: form.username.trim(), private_mode: isPrivate })
+      const authenticatedUser = await login({ ...form, username: form.username.trim() })
       navigate(authenticatedUser.role === 'boss' || authenticatedUser.role === 'superadmin' ? '/dashboard' : '/evaluations', { replace: true })
     } catch (err) {
       setError(errorMessage(err, 'Credenciales inválidas'))
@@ -103,9 +93,10 @@ export function LoginPage() {
           </div>
 
           <form onSubmit={onSubmit} className="flex flex-col gap-2.5">
-            {privateMode && (
-              <div role="alert" className={ALERT_ERROR}>
-                No se permite el acceso desde una ventana privada o de incógnito. Usa una ventana normal del navegador.
+            {storageWarning && (
+              <div role="status" className={ALERT_WARN}>
+                Este navegador parece no conservar los datos de la sesión (por ejemplo, una ventana privada).
+                Cada cuenta queda vinculada al primer navegador donde inicia sesión: usa tu navegador habitual.
               </div>
             )}
             {error && <div role="alert" className={ALERT_ERROR}>{error}</div>}
@@ -117,7 +108,7 @@ export function LoginPage() {
               Contraseña
               <PasswordInput name="password" autoComplete="current-password" value={form.password} onChange={onChange} required />
             </label>
-            <Button type="submit" loading={loading} disabled={privateMode} fullWidth className="mt-1 !bg-[#c02645] hover:!bg-[#a71932] focus-visible:!ring-[#c02645]/50">
+            <Button type="submit" loading={loading} fullWidth className="mt-1 !bg-[#c02645] hover:!bg-[#a71932] focus-visible:!ring-[#c02645]/50">
               {loading ? 'Ingresando...' : 'Iniciar sesión'}
             </Button>
           </form>

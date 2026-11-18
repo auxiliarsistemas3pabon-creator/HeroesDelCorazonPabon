@@ -5,7 +5,7 @@ const mockApi = vi.fn()
 let realtimeOptions
 const disconnect = vi.fn()
 
-vi.mock('../lib/api', () => ({ api: (...args) => mockApi(...args) }))
+vi.mock('../lib/api', () => ({ api: (...args) => mockApi(...args), SESSION_EXPIRED_EVENT: 'auth:session-expired' }))
 vi.mock('../lib/realtime', () => ({
   connectRealtime: (options) => {
     realtimeOptions = options
@@ -121,6 +121,14 @@ describe('AuthProvider', () => {
     await waitFor(() => expect(screen.getByTestId('state')).toHaveTextContent('ana'))
     mockApi.mockResolvedValueOnce(null)
     await act(async () => { await ctx.logout() })
+    expect(screen.getByTestId('state')).toHaveTextContent('anon')
+  })
+
+  it('sesión perdida en el servidor vuelve a exigir login', async () => {
+    mockApi.mockResolvedValueOnce(user)
+    renderProvider()
+    await waitFor(() => expect(screen.getByTestId('state')).toHaveTextContent('ana'))
+    act(() => { window.dispatchEvent(new Event('auth:session-expired')) })
     expect(screen.getByTestId('state')).toHaveTextContent('anon')
   })
 

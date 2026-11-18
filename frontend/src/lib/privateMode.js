@@ -1,7 +1,6 @@
-// Detección (mejor esfuerzo) de ventanas privadas/incógnito. Ante cualquier duda
-// devuelve false: es preferible dejar pasar que bloquear a un usuario legítimo.
-// El servidor vuelve a validar el aviso `private_mode` en /auth/login/ y además
-// liga la sesión a un dispositivo registrado mediante una cookie httpOnly.
+// Heurística de almacenamiento restringido (mejor esfuerzo). NO identifica el incógnito con
+// certeza: Chrome lo oculta y puede haber falsos positivos. Solo alimenta un aviso en el login;
+// el control real es el dispositivo fijo que valida el servidor (cookie httpOnly por cuenta).
 
 function isFirefox() {
   return typeof navigator !== 'undefined' && /firefox/i.test(navigator.userAgent)

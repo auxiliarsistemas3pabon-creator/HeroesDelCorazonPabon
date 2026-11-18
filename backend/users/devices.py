@@ -1,16 +1,21 @@
-"""Registro y validacion de dispositivos de confianza ligados a la sesion."""
+"""Dispositivo fijo: cada cuenta queda ligada a un unico navegador registrado.
+
+El primer navegador donde el usuario inicia sesion queda como su dispositivo. Cualquier otro
+navegador (incluidas las ventanas privadas/incognito, que nunca conservan la cookie) se rechaza
+hasta que un superadmin libere el dispositivo.
+"""
 
 import hashlib
 import secrets
 
 from django.conf import settings
+from django.db import transaction
 from django.utils import timezone
 
-from .models import TrustedDevice
+from .models import TrustedDevice, User
 
 DEVICE_COOKIE_NAME = "device_id"
 DEVICE_CLAIM = "did"
-MAX_ACTIVE_DEVICES = 5
 DEVICE_COOKIE_MAX_AGE = 60 * 60 * 24 * 365
 
 
@@ -34,58 +39,42 @@ def find_device(request, user_id, device_id=None):
     return qs.first()
 
 
-def register_device(request, user):
-    """Reutiliza el dispositivo conocido del usuario o registra uno nuevo.
+class DeviceNotAllowed(Exception):
+    """La cuenta ya esta ligada a otro navegador."""
 
-    Devuelve (device, raw_token); raw_token solo viene cuando hay que (re)emitir la cookie.
-    Los usuarios registrados nunca se bloquean por estrenar dispositivo: se registra y listo.
+
+def register_device(request, user):
+    """Reutiliza el dispositivo del usuario o, si aun no tiene ninguno, registra este navegador.
+
+    Devuelve (device, raw_token); raw_token solo viene cuando hay que emitir la cookie.
+    Lanza DeviceNotAllowed si la cuenta ya tiene un dispositivo activo distinto a este navegador.
     """
     device = find_device(request, user.pk)
     if device:
         TrustedDevice.objects.filter(pk=device.pk).update(last_seen=timezone.now())
         return device, None
-    raw = secrets.token_urlsafe(32)
-    active = list(TrustedDevice.objects.filter(user=user, revoked=False).order_by("last_seen"))
-    for old in active[: max(0, len(active) - (MAX_ACTIVE_DEVICES - 1))]:
-        old.revoked = True
-        old.save(update_fields=["revoked"])
-    device = TrustedDevice.objects.create(
-        user=user,
-        token_hash=_hash(raw),
-        user_agent=request.META.get("HTTP_USER_AGENT", "")[:300],
-        ip_address=_client_ip(request),
-    )
+    with transaction.atomic():
+        # Bloquea la fila del usuario: dos primeros logins simultaneos no pueden registrar dos dispositivos.
+        User.objects.select_for_update().filter(pk=user.pk).first()
+        if TrustedDevice.objects.filter(user=user, revoked=False).exists():
+            raise DeviceNotAllowed
+        raw = secrets.token_urlsafe(32)
+        device = TrustedDevice.objects.create(
+            user=user,
+            token_hash=_hash(raw),
+            user_agent=request.META.get("HTTP_USER_AGENT", "")[:300],
+            ip_address=_client_ip(request),
+        )
     return device, raw
 
 
-def has_active_session_elsewhere(request, user):
-    """True si el usuario tiene una sesion abierta en OTRO navegador/dispositivo.
-
-    Una sesion cuenta como activa si no se cerro (session_jti) y tuvo actividad (login/refresh)
-    dentro de la vida del access token: el frontend renueva al menos con esa frecuencia mientras
-    se usa, asi que una ventana cerrada sin "Cerrar sesion" deja de bloquear pasado ese tiempo.
-    """
-    cutoff = timezone.now() - settings.SIMPLE_JWT["ACCESS_TOKEN_LIFETIME"]
-    active = TrustedDevice.objects.filter(user=user, revoked=False, last_seen__gte=cutoff).exclude(session_jti="")
-    current = find_device(request, user.pk)
-    if current:
-        active = active.exclude(pk=current.pk)
-    return active.exists()
+def has_device(user) -> bool:
+    return TrustedDevice.objects.filter(user=user, revoked=False).exists()
 
 
-def open_session(device, refresh):
-    """Marca la sesion (refresh token) como abierta en el dispositivo y renueva su actividad."""
-    TrustedDevice.objects.filter(pk=device.pk).update(session_jti=refresh["jti"], last_seen=timezone.now())
-
-
-def close_session(request, refresh):
-    """Cierra la sesion del dispositivo dueño del refresh token (solo si la peticion trae su cookie)."""
-    claimed = refresh.get(DEVICE_CLAIM)
-    if claimed is None:
-        return
-    device = find_device(request, refresh.get("user_id"), claimed)
-    if device:
-        TrustedDevice.objects.filter(pk=device.pk).update(session_jti="")
+def release_devices(user) -> int:
+    """Libera la cuenta: revoca su dispositivo (su sesion actual deja de valer) y el proximo login registra uno nuevo."""
+    return TrustedDevice.objects.filter(user=user, revoked=False).update(revoked=True)
 
 
 def set_device_cookie(response, raw):

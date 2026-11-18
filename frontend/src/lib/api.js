@@ -6,6 +6,8 @@
 // proxies /api to the Docker backend configured by VITE_API_URL; Render applies
 // the equivalent /api rewrite in production. This keeps auth cookies first-party.
 const BASE = '/api/v1'
+// Se emite cuando el servidor ya no reconoce la sesión; AuthContext lo escucha y vuelve al login.
+export const SESSION_EXPIRED_EVENT = 'auth:session-expired'
 let csrfTokenValue = ''
 
 // Django exige el token CSRF en cabecera para métodos no seguros; se lee de la cookie que emite el backend.
@@ -39,8 +41,8 @@ export function errorMessage(error, fallback = 'Ocurrió un error') {
     console.warn('Permiso no autorizado')
     return securityCode === 'user_not_found' ? 'Usuario no encontrado.' : 'Acceso no autorizado.'
   }
-  if (securityCode === 'session_active') {
-    return 'Esta cuenta ya tiene una sesión abierta en otro navegador. Cierra sesión allí para poder entrar aquí.'
+  if (securityCode === 'device_not_registered') {
+    return 'Esta cuenta está vinculada a otro navegador. Inicia sesión desde tu navegador habitual o pide al administrador que libere el dispositivo.'
   }
   if (securityCode === 'private_mode') {
     return 'No se permite el acceso desde una ventana privada o de incógnito. Usa una ventana normal del navegador.'
@@ -93,7 +95,13 @@ export async function api(path, options) {
     }
     // Access token vencido: intenta renovarlo una vez y repite la petición.
     if (error.status === 401 && !path.startsWith('/auth/')) {
-      await send('/auth/refresh/', { method: 'POST' })
+      try {
+        await send('/auth/refresh/', { method: 'POST' })
+      } catch (refreshError) {
+        // Sesión perdida (cookies borradas, dispositivo liberado o refresh vencido): se exige iniciar sesión de nuevo.
+        if (refreshError.status === 401) window.dispatchEvent(new Event(SESSION_EXPIRED_EVENT))
+        throw refreshError
+      }
       return send(path, options)
     }
     throw error

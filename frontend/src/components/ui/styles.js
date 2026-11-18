@@ -4,6 +4,8 @@ export const FIELD =
 export const LABEL = 'flex flex-col gap-1.5 text-sm font-medium text-app'
 export const ALERT_ERROR =
   'rounded-lg border border-red-300 bg-red-50 p-3 text-sm text-red-700 dark:border-red-900/60 dark:bg-red-950/40 dark:text-red-300'
+export const ALERT_WARN =
+  'rounded-lg border border-amber-300 bg-amber-50 p-3 text-sm text-amber-800 dark:border-amber-900/60 dark:bg-amber-950/40 dark:text-amber-200'
 export const ALERT_OK =
   'rounded-lg border border-emerald-300 bg-emerald-50 p-3 text-sm text-emerald-700 dark:border-emerald-900/60 dark:bg-emerald-950/40 dark:text-emerald-300'
 export const PAGE_TITLE = 'text-2xl font-bold text-app'
