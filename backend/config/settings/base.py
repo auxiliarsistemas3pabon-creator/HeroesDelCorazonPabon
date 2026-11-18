@@ -258,9 +258,6 @@ SIMPLE_JWT = {
     "BLACKLIST_AFTER_ROTATION": True,
 }
 
-# DOBLE AUTENTICACION (TOTP): dias que se confia en un navegador tras superar el codigo.
-MFA_TRUST_DAYS = env.int("MFA_TRUST_DAYS", default=30)
-
 # COOKIES AUTHENTICACION CONFIG 
 # El frontend web recibe el access/refresh token como cookies httpOnly (no
 # localStorage) para que un XSS no pueda robarlos ni suplantar al usuario.

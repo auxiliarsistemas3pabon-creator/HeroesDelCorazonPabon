@@ -90,9 +90,6 @@ export function AuthProvider({ children }) {
       // Login ya devuelve el perfil autenticado y fija las cookies httpOnly:
       // reutilizarlo evita una ida y vuelta extra antes de abrir la aplicación.
       let authenticatedUser = await api('/auth/login/', { method: 'POST', body: credentials })
-      // Navegador no reconocido (nuevo, cookies borradas, ventana privada): el servidor pide el código 2FA
-      // y todavía no hay sesión. LoginPage muestra el segundo paso y lo completa con verifyMfa.
-      if (authenticatedUser?.mfa_required) return authenticatedUser
       if (!authenticatedUser) {
         // /auth/me/ uses 200 + null for an absent/invalid access cookie.
         // Try the refresh cookie once before reporting a session transport issue.
@@ -121,14 +118,6 @@ export function AuthProvider({ children }) {
     }
   }
 
-  // Segundo paso del login: valida el código TOTP del desafío y, si es correcto, abre la sesión.
-  async function verifyMfa(mfaToken, code) {
-    const operation = ++authOperation.current
-    const authenticatedUser = await api('/auth/mfa/verify/', { method: 'POST', body: { mfa_token: mfaToken, code } })
-    if (operation === authOperation.current) setUser(authenticatedUser)
-    return authenticatedUser
-  }
-
   async function logout() {
     authOperation.current += 1
     await api('/auth/logout/', { method: 'POST' })
@@ -137,7 +126,7 @@ export function AuthProvider({ children }) {
 
   return (
     <AuthContext.Provider
-      value={{ user, loading, login, verifyMfa, logout, realtimeStatus, realtimeEvent, realtimeNotice }}
+      value={{ user, loading, login, logout, realtimeStatus, realtimeEvent, realtimeNotice }}
     >
       {children}
     </AuthContext.Provider>

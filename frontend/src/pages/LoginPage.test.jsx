@@ -3,11 +3,11 @@ import { MemoryRouter, Route, Routes } from 'react-router-dom'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 const mockLogin = vi.fn()
-const mockVerify = vi.fn()
 let mockUser = null
+const mockDetect = vi.fn()
 
-vi.mock('../context/AuthContext', () => ({ useAuth: () => ({ user: mockUser, login: mockLogin, verifyMfa: mockVerify }) }))
-vi.mock('qrcode', () => ({ default: { toDataURL: () => Promise.resolve('data:image/png;base64,QR') } }))
+vi.mock('../context/AuthContext', () => ({ useAuth: () => ({ user: mockUser, login: mockLogin }) }))
+vi.mock('../lib/privateMode', () => ({ detectPrivateMode: () => mockDetect() }))
 
 import { LoginPage } from './LoginPage'
 
@@ -23,7 +23,9 @@ function renderPage() {
   )
 }
 
-function fill(username, password) {
+// Los campos se habilitan cuando termina la verificación del navegador.
+async function fill(username, password) {
+  await waitFor(() => expect(screen.getByLabelText('Usuario')).toBeEnabled())
   fireEvent.change(screen.getByLabelText('Usuario'), { target: { name: 'username', value: username } })
   fireEvent.change(screen.getByLabelText(/^Contraseña/), { target: { name: 'password', value: password } })
 }
@@ -31,22 +33,23 @@ function fill(username, password) {
 describe('LoginPage', () => {
   beforeEach(() => {
     mockUser = null
+    mockDetect.mockResolvedValue(false)
     vi.spyOn(console, 'warn').mockImplementation(() => {})
   })
 
-  it('un jefe va al dashboard', async () => {
+  it('un jefe va al dashboard y envía private_mode=false', async () => {
     mockLogin.mockResolvedValue({ role: 'boss' })
     renderPage()
-    fill('  ana  ', 'clave')
+    await fill('  ana  ', 'clave')
     fireEvent.click(screen.getByRole('button', { name: 'Iniciar sesión' }))
     expect(await screen.findByText('DASHBOARD')).toBeInTheDocument()
-    expect(mockLogin).toHaveBeenCalledWith({ username: 'ana', password: 'clave' })
+    expect(mockLogin).toHaveBeenCalledWith({ username: 'ana', password: 'clave', private_mode: false })
   })
 
   it('un colaborador va a evaluaciones', async () => {
     mockLogin.mockResolvedValue({ role: 'collaborator' })
     renderPage()
-    fill('luis', 'clave')
+    await fill('luis', 'clave')
     fireEvent.click(screen.getByRole('button', { name: 'Iniciar sesión' }))
     expect(await screen.findByText('EVALUATIONS')).toBeInTheDocument()
   })
@@ -54,7 +57,7 @@ describe('LoginPage', () => {
   it('usuario no encontrado', async () => {
     mockLogin.mockRejectedValue({ status: 401, data: { code: 'user_not_found' } })
     renderPage()
-    fill('nadie', 'x')
+    await fill('nadie', 'x')
     fireEvent.click(screen.getByRole('button', { name: 'Iniciar sesión' }))
     expect(await screen.findByRole('alert')).toHaveTextContent('Usuario no encontrado.')
   })
@@ -62,59 +65,41 @@ describe('LoginPage', () => {
   it('clave incorrecta muestra acceso no autorizado', async () => {
     mockLogin.mockRejectedValue({ status: 401, data: { code: 'unauthorized_access' } })
     renderPage()
-    fill('ana', 'mala')
+    await fill('ana', 'mala')
     fireEvent.click(screen.getByRole('button', { name: 'Iniciar sesión' }))
     expect(await screen.findByRole('alert')).toHaveTextContent('Acceso no autorizado.')
     expect(console.warn).toHaveBeenCalledWith('Permiso no autorizado')
   })
 
-  it('primer login: muestra el QR y entra al confirmar el código', async () => {
-    mockLogin.mockResolvedValue({ mfa_required: true, mfa_token: 'tok', enrollment: { secret: 'ABCDEF', otpauth_uri: 'otpauth://totp/x' } })
-    mockVerify.mockResolvedValue({ role: 'collaborator' })
+  it('mientras se verifica el navegador no se puede escribir', async () => {
+    let finish
+    mockDetect.mockReturnValue(new Promise((resolve) => { finish = resolve }))
     renderPage()
-    fill('luis', 'clave')
-    fireEvent.click(screen.getByRole('button', { name: 'Iniciar sesión' }))
-    expect(await screen.findByText('Activa la doble autenticación')).toBeInTheDocument()
-    expect(await screen.findByAltText(/Código QR/)).toHaveAttribute('src', 'data:image/png;base64,QR')
-    expect(screen.getByText('ABCDEF')).toBeInTheDocument()
-    fireEvent.change(screen.getByLabelText('Código de verificación'), { target: { value: '12a3456' } })
-    fireEvent.click(screen.getByRole('button', { name: 'Verificar' }))
-    expect(await screen.findByText('EVALUATIONS')).toBeInTheDocument()
-    expect(mockVerify).toHaveBeenCalledWith('tok', '123456')
+    expect(screen.getByRole('status')).toHaveTextContent('Verificando navegador')
+    expect(screen.getByLabelText('Usuario')).toBeDisabled()
+    expect(screen.getByLabelText(/^Contraseña/)).toBeDisabled()
+    finish(false)
+    await waitFor(() => expect(screen.getByLabelText('Usuario')).toBeEnabled())
+    expect(screen.getByLabelText(/^Contraseña/)).toBeEnabled()
   })
 
-  it('navegador no reconocido: pide solo el código y muestra el error si es incorrecto', async () => {
-    mockLogin.mockResolvedValue({ mfa_required: true, mfa_token: 'tok' })
-    mockVerify.mockRejectedValue({ status: 401, data: { code: 'mfa_invalid' } })
+  it('ventana privada: no permite escribir usuario ni contraseña', async () => {
+    mockDetect.mockResolvedValue(true)
     renderPage()
-    fill('ana', 'clave')
-    fireEvent.click(screen.getByRole('button', { name: 'Iniciar sesión' }))
-    expect(await screen.findByText('Verificación en dos pasos')).toBeInTheDocument()
-    expect(screen.queryByAltText(/Código QR/)).not.toBeInTheDocument()
-    fireEvent.change(screen.getByLabelText('Código de verificación'), { target: { value: '000000' } })
-    fireEvent.click(screen.getByRole('button', { name: 'Verificar' }))
-    expect(await screen.findByRole('alert')).toHaveTextContent('Código incorrecto')
+    expect(await screen.findByText(/ventana privada o de incógnito/)).toBeInTheDocument()
+    expect(screen.getByLabelText('Usuario')).toBeDisabled()
+    expect(screen.getByLabelText(/^Contraseña/)).toBeDisabled()
+    expect(screen.getByRole('button', { name: 'Iniciar sesión' })).toBeDisabled()
+    fireEvent.submit(screen.getByRole('button', { name: 'Iniciar sesión' }).closest('form'))
+    expect(mockLogin).not.toHaveBeenCalled()
+    expect(console.warn).toHaveBeenCalledWith('Permiso no autorizado')
   })
 
-  it('desafío vencido vuelve al formulario de contraseña', async () => {
-    mockLogin.mockResolvedValue({ mfa_required: true, mfa_token: 'tok' })
-    mockVerify.mockRejectedValue({ status: 401, data: { code: 'mfa_expired' } })
+  it('si el detector falla, el formulario se habilita (nunca bloquea por error)', async () => {
+    mockDetect.mockRejectedValue(new Error('x'))
     renderPage()
-    fill('ana', 'clave')
-    fireEvent.click(screen.getByRole('button', { name: 'Iniciar sesión' }))
-    fireEvent.change(await screen.findByLabelText('Código de verificación'), { target: { value: '123456' } })
-    fireEvent.click(screen.getByRole('button', { name: 'Verificar' }))
-    expect(await screen.findByRole('alert')).toHaveTextContent('venció')
-    expect(screen.getByRole('button', { name: 'Iniciar sesión' })).toBeInTheDocument()
-  })
-
-  it('volver cancela el segundo paso', async () => {
-    mockLogin.mockResolvedValue({ mfa_required: true, mfa_token: 'tok' })
-    renderPage()
-    fill('ana', 'clave')
-    fireEvent.click(screen.getByRole('button', { name: 'Iniciar sesión' }))
-    fireEvent.click(await screen.findByRole('button', { name: 'Volver al inicio de sesión' }))
-    expect(screen.getByRole('button', { name: 'Iniciar sesión' })).toBeInTheDocument()
+    await waitFor(() => expect(screen.getByLabelText('Usuario')).toBeEnabled())
+    expect(screen.queryByText(/ventana privada/)).not.toBeInTheDocument()
   })
 
   it('con sesión activa redirige', async () => {

@@ -2,23 +2,9 @@
 from rest_framework.test import APITestCase
 
 from .models import User
-from .totp import code_for
 
 # All data is fictitious.
 PASSWORD = "Demo-Pass-2026"
-LOGIN = "/api/v1/auth/login/"
-MFA_VERIFY = "/api/v1/auth/mfa/verify/"
-
-
-def sign_in(client, username, password=PASSWORD):
-    """Login completo: contrasena y, si el navegador no es de confianza, el codigo TOTP actual."""
-    r = client.post(LOGIN, {"username": username, "password": password}, format="json")
-    if r.status_code == 200 and isinstance(r.data, dict) and r.data.get("mfa_required"):
-        user = User.objects.get(username=username)
-        # Atajo de prueba: varios logins en el mismo intervalo de 30 s reutilizarian el mismo codigo.
-        User.objects.filter(pk=user.pk).update(totp_last_step=-1)
-        r = client.post(MFA_VERIFY, {"mfa_token": r.data["mfa_token"], "code": code_for(user.totp_secret)}, format="json")
-    return r
 
 
 def create_user(username, role=User.Role.COLLABORATOR, area="Emergency"):
@@ -35,7 +21,7 @@ class AuthTests(APITestCase):
     def test_login_ok_sets_httponly_cookies(self):
         self.assertNotEqual(self.boss.password, PASSWORD)
         self.assertTrue(self.boss.check_password(PASSWORD))
-        r = sign_in(self.client, "boss.demo")
+        r = self.client.post("/api/v1/auth/login/", {"username": "boss.demo", "password": PASSWORD})
         self.assertEqual(r.status_code, 200)
         self.assertEqual(r.data["role"], "boss")
         self.assertTrue(r.cookies["access_token"]["httponly"])
@@ -60,13 +46,13 @@ class AuthTests(APITestCase):
         self.assertIsNone(response.data)
 
     def test_cookie_requires_csrf_on_post(self):
-        sign_in(self.client, "boss.demo")
+        self.client.post("/api/v1/auth/login/", {"username": "boss.demo", "password": PASSWORD})
         self.client.handler.enforce_csrf_checks = True
         r = self.client.post("/api/v1/users/register/", {"username": "x"})
         self.assertEqual(r.status_code, 403)
 
     def test_refresh_and_logout(self):
-        sign_in(self.client, "boss.demo")
+        self.client.post("/api/v1/auth/login/", {"username": "boss.demo", "password": PASSWORD})
         self.assertEqual(self.client.post("/api/v1/auth/refresh/").status_code, 200)
         self.assertEqual(self.client.post("/api/v1/auth/logout/").status_code, 204)
         response = self.client.get("/api/v1/auth/me/")
@@ -100,7 +86,7 @@ class RegisterTests(APITestCase):
         self.assertNotIn("password", r.data)
         self.assertEqual(User.objects.get(username="nuevo.demo").role, "collaborator")  # role cannot be chosen
         self.client.force_authenticate(None)
-        r = sign_in(self.client, "nuevo.demo", "Clave-Nueva-2026")
+        r = self.client.post("/api/v1/auth/login/", {"username": "nuevo.demo", "password": "Clave-Nueva-2026"})
         self.assertEqual(r.status_code, 200)
 
     def test_sign_up_needs_no_email_and_validates_area(self):

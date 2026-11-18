@@ -36,13 +36,6 @@ class UserSerializer(serializers.ModelSerializer[User]):
         read_only_fields = ("id", "role", "is_active", "date_joined", "last_login")
 
 
-class AdminUserSerializer(UserSerializer):
-    """Listado del superadmin: indica si la cuenta ya registro la app de doble autenticacion."""
-    class Meta(UserSerializer.Meta):
-        fields = (*UserSerializer.Meta.fields, "totp_enabled")
-        read_only_fields = (*UserSerializer.Meta.read_only_fields, "totp_enabled")
-
-
 class AuthenticatedUserSerializer(UserSerializer):
     """Usuario autenticado (login/me): anade password_change_required para que el frontend redirija al cambio de clave."""
     password_change_required = serializers.BooleanField(read_only=True)

@@ -58,14 +58,6 @@ class User(AbstractUser):
     first_name = models.CharField(_("First name"), max_length=150)
     last_name = models.CharField(_("Last name"), max_length=150)
     password_change_required = models.BooleanField(default=False)
-    # Doble autenticacion (TOTP). El secreto se genera en el primer login y se activa al confirmar un codigo.
-    totp_secret = models.CharField(max_length=64, blank=True, default="")
-    totp_enabled = models.BooleanField(default=False)
-    # Ultimo paso de tiempo aceptado: un mismo codigo no se puede usar dos veces.
-    totp_last_step = models.BigIntegerField(default=-1)
-    # Freno a la fuerza bruta del codigo: intentos fallidos seguidos y bloqueo temporal.
-    mfa_failed_attempts = models.PositiveSmallIntegerField(default=0)
-    mfa_locked_until = models.DateTimeField(null=True, blank=True)
 
     objects = CustomUserManager()
 
@@ -101,8 +93,6 @@ class TrustedDevice(models.Model):
     created_at = models.DateTimeField(auto_now_add=True)
     last_seen = models.DateTimeField(auto_now_add=True)
     revoked = models.BooleanField(default=False)
-    # Momento en que este navegador supero la doble autenticacion; se le confia durante MFA_TRUST_DAYS.
-    mfa_verified_at = models.DateTimeField(null=True, blank=True)
 
     class Meta:
         verbose_name = _("Trusted device")

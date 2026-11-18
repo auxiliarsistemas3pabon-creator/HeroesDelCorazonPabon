@@ -22,12 +22,10 @@ from audit.mixins import AuditLogMixin
 from common.permissions import IsBossOrSuperAdmin, IsSuperAdmin
 from common.security import UNAUTHORIZED_MESSAGE, log_unauthorized, looks_malicious
 
-from . import mfa
 from .areas import is_removed_area
 from .devices import DEVICE_CLAIM, find_device, register_device, set_device_cookie
 from .models import User
 from .serializers import (
-    AdminUserSerializer,
     AuthenticatedUserSerializer,
     LoginSerializer,
     PasswordChangeSerializer,
@@ -62,17 +60,6 @@ def _set_auth_cookies(response, refresh: RefreshToken):
     )
 
 
-def _start_session(request, user, device, raw_device):
-    """Emite las cookies JWT ligadas al dispositivo (solo tras contrasena + dispositivo de confianza o 2FA)."""
-    get_token(request)  # forces the csrftoken cookie for the frontend
-    response = Response(AuthenticatedUserSerializer(user).data)
-    refresh = RefreshToken.for_user(user)
-    refresh[DEVICE_CLAIM] = device.pk
-    _set_auth_cookies(response, refresh)
-    set_device_cookie(response, raw_device, user.pk)
-    return response
-
-
 def _clear_auth_cookies(response):
     """Borra las cookies de sesion; el path debe coincidir con el usado al crearlas o el navegador no las elimina."""
     response.delete_cookie(settings.AUTH_COOKIE_ACCESS_NAME)
@@ -102,6 +89,15 @@ class LoginView(AuditLogMixin, APIView):
         username = credentials["username"]
         password = credentials["password"]
 
+        # El navegador declara si esta en modo privado/incognito. Es defensa en
+        # profundidad: el bloqueo principal ocurre en el frontend.
+        if request.data.get("private_mode") is True:
+            log_unauthorized(request, "private_mode")
+            return Response(
+                {"detail": _("Private or incognito windows are not allowed. Use a regular browser window."),
+                 "code": "private_mode"},
+                status=status.HTTP_403_FORBIDDEN,
+            )
         if looks_malicious(username):
             log_unauthorized(request, "malicious_username")
             return Response(
@@ -142,43 +138,16 @@ class LoginView(AuditLogMixin, APIView):
                 status=status.HTTP_401_UNAUTHORIZED,
             )
 
-        # Contrasena correcta. Navegador de confianza (2FA superado hace menos de MFA_TRUST_DAYS): entra.
-        # Cualquier otro (computador nuevo, cookies borradas, ventana privada): se pide el codigo TOTP
-        # y NO se emite ninguna sesion hasta validarlo en /auth/mfa/verify/.
-        device = find_device(request, user.pk)
-        if not mfa.is_trusted(device):
-            return Response(mfa.issue_challenge(user))
+        # Usuario registrado con clave correcta: se registra/reutiliza el dispositivo
+        # y la sesion queda ligada a el.
         device, raw_device = register_device(request, user)
-        return _start_session(request, user, device, raw_device)
-
-
-class MfaVerifyView(AuditLogMixin, APIView):
-    """POST /auth/mfa/verify/: segundo paso del login. Valida el codigo TOTP del desafio y abre la sesion.
-
-    El navegador queda como dispositivo de confianza durante MFA_TRUST_DAYS.
-    """
-    authentication_classes: list = []
-    permission_classes = [AllowAny]
-    throttle_classes = [ScopedRateThrottle]
-    throttle_scope = "login"
-
-    def post(self, request):
-        user = mfa.load_challenge(request.data.get("mfa_token"))
-        if user is None:
-            log_unauthorized(request, "mfa_challenge_invalid")
-            return Response({"detail": _("Verification expired. Sign in again."), "code": "mfa_expired"},
-                            status=status.HTTP_401_UNAUTHORIZED)
-        if mfa.is_locked(user):
-            log_unauthorized(request, "mfa_locked")
-            return Response({"detail": _("Too many failed attempts. Try again later."), "code": "mfa_locked"},
-                            status=status.HTTP_403_FORBIDDEN)
-        if not mfa.check_code(user, request.data.get("code")):
-            log_unauthorized(request, "mfa_invalid_code")
-            return Response({"detail": _("Invalid verification code."), "code": "mfa_invalid"},
-                            status=status.HTTP_401_UNAUTHORIZED)
-        device, raw_device = register_device(request, user)
-        mfa.mark_verified(device)
-        return _start_session(request, user, device, raw_device)
+        get_token(request)  # forces the csrftoken cookie for the frontend
+        response = Response(AuthenticatedUserSerializer(user).data)
+        refresh = RefreshToken.for_user(user)
+        refresh[DEVICE_CLAIM] = device.pk
+        _set_auth_cookies(response, refresh)
+        set_device_cookie(response, raw_device, user.pk)
+        return response
 
 
 class CsrfTokenView(APIView):
@@ -202,19 +171,16 @@ class RefreshView(AuditLogMixin, APIView):
         try:
             old = RefreshToken(raw)
             user = User.objects.get(pk=old["user_id"], is_active=True)
-            # La sesion solo se renueva desde su mismo navegador y mientras siga siendo de confianza (2FA vigente).
-            # Las sesiones sin dispositivo (anteriores al 2FA) no se renuevan: obligan a entrar con codigo.
             claimed_device = old.get(DEVICE_CLAIM)
-            device = find_device(request, user.pk, claimed_device) if claimed_device is not None else None
-            if not mfa.is_trusted(device):
+            # Una sesion ligada a un dispositivo solo se renueva desde ese mismo dispositivo.
+            if claimed_device is not None and find_device(request, user.pk, claimed_device) is None:
                 log_unauthorized(request, "device_mismatch")
-                response = Response({"detail": _("Session expired.")}, status=status.HTTP_401_UNAUTHORIZED)
-                _clear_auth_cookies(response)
-                return response
+                return Response({"detail": _("Session expired.")}, status=status.HTTP_401_UNAUTHORIZED)
             old.blacklist()
         except (TokenError, User.DoesNotExist):
             return Response({"detail": _("Session expired.")}, status=status.HTTP_401_UNAUTHORIZED)
 
+        # Sesiones emitidas antes de esta version no traen dispositivo: se registran aqui.
         device, raw_device = register_device(request, user)
         response = Response({"detail": "ok"})
         new_refresh = RefreshToken.for_user(user)
@@ -268,7 +234,7 @@ class AdminUsersView(AuditLogMixin, APIView):
 
     def get(self, request):
         users = User.objects.all().order_by("username")
-        return Response(AdminUserSerializer(users, many=True).data)
+        return Response(UserSerializer(users, many=True).data)
 
     def patch(self, request, user_id):
         try:
@@ -303,22 +269,7 @@ class AdminUsersView(AuditLogMixin, APIView):
         if "is_active" in request.data:
             user.is_active = active
         user.save()
-        return Response(AdminUserSerializer(user).data)
-
-
-class ResetMfaView(AuditLogMixin, APIView):
-    """POST /users/admin/<id>/reset-mfa/: reinicia el 2FA de una cuenta (p. ej. celular perdido).
-
-    Sus sesiones se cierran y el proximo inicio de sesion vuelve a mostrar el QR para registrar la app.
-    """
-    permission_classes = [IsSuperAdmin]
-
-    def post(self, request, user_id):
-        user = User.objects.filter(pk=user_id).first()
-        if user is None:
-            return Response({"detail": _("User not found.")}, status=status.HTTP_404_NOT_FOUND)
-        mfa.reset_mfa(user)
-        return Response(AdminUserSerializer(user).data)
+        return Response(UserSerializer(user).data)
 
 
 class StaffImportView(AuditLogMixin, APIView):

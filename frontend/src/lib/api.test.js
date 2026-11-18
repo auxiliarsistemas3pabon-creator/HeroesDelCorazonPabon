@@ -18,11 +18,7 @@ describe('errorMessage', () => {
     expect(console.warn).toHaveBeenCalledWith('Permiso no autorizado')
   })
   it('modo privado', () => {
-  })
-  it('mensajes de la doble autenticación', () => {
-    expect(errorMessage({ status: 401, data: { code: 'mfa_invalid' } })).toMatch(/Código incorrecto/)
-    expect(errorMessage({ status: 401, data: { code: 'mfa_expired' } })).toMatch(/venció/)
-    expect(errorMessage({ status: 403, data: { code: 'mfa_locked' } })).toMatch(/15 minutos/)
+    expect(errorMessage({ status: 403, data: { code: 'private_mode' } })).toMatch(/incógnito/)
   })
   it('sesión no establecida', () => {
     expect(errorMessage({ code: 'SESSION_NOT_ESTABLISHED' })).toMatch(/cookie/)

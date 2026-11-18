@@ -6,8 +6,7 @@ from common.security import looks_malicious
 
 from .devices import device_cookie_name
 from .models import TrustedDevice, User
-from .tests import MFA_VERIFY, PASSWORD, create_user, sign_in
-from .totp import code_for
+from .tests import PASSWORD, create_user
 
 LOGIN = "/api/v1/auth/login/"
 
@@ -75,7 +74,7 @@ class LoginSecurityTests(APITestCase):
         r = self._admin_client().patch(f"/api/v1/users/admin/{self.user.pk}/", {"new_password": "Nueva-Clave-2026*"}, format="json")
         self.assertEqual(r.status_code, 200)
         self.assertTrue(r.data["is_active"])
-        login = sign_in(self.client, "colab.demo", "Nueva-Clave-2026*")
+        login = self.post("colab.demo", "Nueva-Clave-2026*")
         self.assertEqual(login.status_code, 200)
         self.assertIn("access_token", login.cookies)
         # La clave anterior deja de servir y el no registrado sigue sin acceso.
@@ -119,11 +118,10 @@ class LoginSecurityTests(APITestCase):
         self.assertEqual(self.post("a" * 500, PASSWORD).status_code, 400)
         self.assertEqual(self.client.post(LOGIN, {"username": "x"}, format="json").status_code, 400)
 
-    def test_private_window_is_not_blocked_but_needs_the_2fa_code(self):
-        # Ya no se bloquea la ventana privada: como no trae el dispositivo de confianza, pide el codigo.
+    def test_private_mode_is_rejected(self):
         r = self.post("colab.demo", PASSWORD, private_mode=True)
-        self.assertEqual(r.status_code, 200)
-        self.assertTrue(r.data["mfa_required"])
+        self.assertEqual(r.status_code, 403)
+        self.assertEqual(r.data["code"], "private_mode")
         self.assertNotIn("access_token", r.cookies)
 
 
@@ -132,7 +130,7 @@ class DeviceSessionTests(APITestCase):
         self.user = create_user("colab.demo")
 
     def login(self, client):
-        return sign_in(client, "colab.demo")
+        return client.post(LOGIN, {"username": "colab.demo", "password": PASSWORD}, format="json")
 
     def test_registered_user_on_new_device_is_allowed_and_device_registered(self):
         r = self.login(self.client)
@@ -156,7 +154,7 @@ class DeviceSessionTests(APITestCase):
         # Equipo compartido: cada cuenta guarda su propia cookie de dispositivo, nadie pisa a nadie.
         create_user("otra.demo")
         self.assertEqual(self.login(self.client).status_code, 200)
-        r = sign_in(self.client, "otra.demo")
+        r = self.client.post(LOGIN, {"username": "otra.demo", "password": PASSWORD}, format="json")
         self.assertEqual(r.status_code, 200)
         self.assertEqual(self.login(self.client).status_code, 200)
         self.assertEqual(TrustedDevice.objects.filter(revoked=False).count(), 2)
@@ -193,152 +191,17 @@ class DeviceSessionTests(APITestCase):
             self.login(APIClient())
         self.assertEqual(TrustedDevice.objects.filter(user=self.user, revoked=False).count(), 5)
 
-    def test_legacy_session_without_device_claim_must_sign_in_with_2fa(self):
+    def test_legacy_session_without_device_claim_is_bound_on_refresh(self):
         from rest_framework_simplejwt.tokens import RefreshToken
 
-        self.client.cookies["refresh_token"] = str(RefreshToken.for_user(self.user))
-        self.assertEqual(self.client.post("/api/v1/auth/refresh/").status_code, 401)
-        self.assertFalse(TrustedDevice.objects.exists())
+        token = RefreshToken.for_user(self.user)
+        self.client.cookies["refresh_token"] = str(token)
+        r = self.client.post("/api/v1/auth/refresh/")
+        self.assertEqual(r.status_code, 200)
+        self.assertEqual(TrustedDevice.objects.count(), 1)
+        self.assertIn(device_cookie_name(self.user.pk), r.cookies)
 
     def test_lockout_does_not_block_owner_with_correct_password(self):
         for _ in range(6):
             self.client.post(LOGIN, {"username": "colab.demo", "password": "mala"}, format="json")
         self.assertEqual(self.login(self.client).status_code, 200)
-
-
-class TwoFactorTests(APITestCase):
-    """Doble autenticacion condicionada por dispositivo de confianza."""
-
-    def setUp(self):
-        self.user = create_user("colab.demo")
-
-    def password_step(self, client):
-        return client.post(LOGIN, {"username": "colab.demo", "password": PASSWORD}, format="json")
-
-    def code(self):
-        self.user.refresh_from_db()
-        return code_for(self.user.totp_secret)
-
-    def test_first_login_shows_enrollment_and_opens_no_session(self):
-        r = self.password_step(self.client)
-        self.assertEqual(r.status_code, 200)
-        self.assertTrue(r.data["mfa_required"])
-        self.assertTrue(r.data["enrollment"]["otpauth_uri"].startswith("otpauth://totp/"))
-        self.assertNotIn("access_token", r.cookies)
-        self.assertIsNone(self.client.get("/api/v1/auth/me/").data)
-        # El QR se mantiene mientras no se confirme: volver a intentarlo no cambia el secreto.
-        self.assertEqual(self.password_step(APIClient()).data["enrollment"]["secret"], r.data["enrollment"]["secret"])
-
-    def test_valid_code_opens_session_and_trusts_the_browser(self):
-        r = self.password_step(self.client)
-        r = self.client.post(MFA_VERIFY, {"mfa_token": r.data["mfa_token"], "code": self.code()}, format="json")
-        self.assertEqual(r.status_code, 200)
-        self.assertEqual(r.data["username"], "colab.demo")
-        self.assertIn("access_token", r.cookies)
-        self.user.refresh_from_db()
-        self.assertTrue(self.user.totp_enabled)
-        # Mismo navegador: la proxima vez basta la contrasena.
-        again = self.password_step(self.client)
-        self.assertNotIn("mfa_required", again.data)
-        self.assertEqual(again.data["username"], "colab.demo")
-
-    def test_private_window_or_new_computer_must_pass_2fa(self):
-        sign_in(self.client, "colab.demo")  # navegador habitual, ya verificado
-        r = self.password_step(APIClient())  # incognito / otro computador: sin cookies
-        self.assertTrue(r.data["mfa_required"])
-        self.assertNotIn("enrollment", r.data)  # la app ya esta registrada: solo pide el codigo
-        self.assertNotIn("access_token", r.cookies)
-
-    def test_wrong_code_is_rejected_and_locks_after_five_attempts(self):
-        token = self.password_step(self.client).data["mfa_token"]
-        for _ in range(5):
-            r = self.client.post(MFA_VERIFY, {"mfa_token": token, "code": "000000"}, format="json")
-            self.assertIn(r.status_code, (401, 403))
-        r = self.client.post(MFA_VERIFY, {"mfa_token": token, "code": self.code()}, format="json")
-        self.assertEqual(r.status_code, 403)
-        self.assertEqual(r.data["code"], "mfa_locked")
-        self.assertNotIn("access_token", r.cookies)
-
-    def test_code_cannot_be_reused(self):
-        token = self.password_step(self.client).data["mfa_token"]
-        code = self.code()
-        self.assertEqual(self.client.post(MFA_VERIFY, {"mfa_token": token, "code": code}, format="json").status_code, 200)
-        other = APIClient()
-        token = self.password_step(other).data["mfa_token"]
-        r = other.post(MFA_VERIFY, {"mfa_token": token, "code": code}, format="json")
-        self.assertEqual(r.status_code, 401)
-        self.assertEqual(r.data["code"], "mfa_invalid")
-
-    def test_tampered_or_expired_challenge_is_rejected(self):
-        r = self.client.post(MFA_VERIFY, {"mfa_token": "falso", "code": "123456"}, format="json")
-        self.assertEqual(r.status_code, 401)
-        self.assertEqual(r.data["code"], "mfa_expired")
-
-    def test_password_change_invalidates_pending_challenge(self):
-        token = self.password_step(self.client).data["mfa_token"]
-        self.user.set_password("Otra-Clave-2026!")
-        self.user.save()
-        r = self.client.post(MFA_VERIFY, {"mfa_token": token, "code": self.code()}, format="json")
-        self.assertEqual(r.data["code"], "mfa_expired")
-
-    def test_trust_expires_after_configured_days(self):
-        from datetime import timedelta
-
-        from django.utils import timezone
-
-        sign_in(self.client, "colab.demo")
-        TrustedDevice.objects.update(mfa_verified_at=timezone.now() - timedelta(days=31))
-        self.assertEqual(self.client.get("/api/v1/users/collaborators/").status_code, 401)
-        self.assertEqual(self.client.post("/api/v1/auth/refresh/").status_code, 401)
-        self.assertTrue(self.password_step(self.client).data["mfa_required"])
-
-    def test_every_module_rejects_a_browser_without_trusted_device(self):
-        boss = create_user("admin.demo", User.Role.SUPERADMIN)
-        normal = APIClient()
-        r = sign_in(normal, boss.username)
-        private = APIClient()
-        private.cookies["access_token"] = r.cookies["access_token"].value
-        modules = [
-            "/api/v1/users/collaborators/", "/api/v1/users/admin/", "/api/v1/users/staff-candidates/",
-            "/api/v1/users/evaluators/", "/api/v1/questions/evaluations/", "/api/v1/questions/categories/",
-            "/api/v1/questions/form/", "/api/v1/questions/", "/api/v1/questions/settings/",
-            "/api/v1/questions/sent/", "/api/v1/questions/submissions/", "/api/v1/questions/results-summary/",
-            "/api/v1/questions/results/", "/api/v1/questions/quota/", "/api/v1/questions/dashboard/",
-            "/api/v1/questions/category-averages/", "/api/v1/questions/stats/",
-        ]
-        for path in modules:
-            with self.subTest(path=path):
-                # Navegador normal autenticado (403 solo si el modulo es de otro rol); sin dispositivo: 401.
-                self.assertNotEqual(normal.get(path).status_code, 401)
-                self.assertEqual(private.get(path).status_code, 401)
-                self.assertEqual(APIClient().get(path).status_code, 401)
-
-    def test_superadmin_reset_shows_new_qr_and_closes_sessions(self):
-        sign_in(self.client, "colab.demo")
-        admin = APIClient()
-        create_user("admin.demo", User.Role.SUPERADMIN)
-        sign_in(admin, "admin.demo")
-        listing = {u["username"]: u for u in admin.get("/api/v1/users/admin/").data}
-        self.assertTrue(listing["colab.demo"]["totp_enabled"])
-        r = admin.post(f"/api/v1/users/admin/{self.user.pk}/reset-mfa/")
-        self.assertEqual(r.status_code, 200)
-        self.assertFalse(r.data["totp_enabled"])
-        self.assertEqual(self.client.get("/api/v1/users/collaborators/").status_code, 401)
-        self.assertIn("enrollment", self.password_step(self.client).data)
-
-    def test_only_superadmin_can_reset_2fa(self):
-        boss = APIClient()
-        create_user("boss.demo", role=User.Role.BOSS)
-        sign_in(boss, "boss.demo")
-        self.assertEqual(boss.post(f"/api/v1/users/admin/{self.user.pk}/reset-mfa/").status_code, 403)
-
-    def test_reset_mfa_command(self):
-        from io import StringIO
-
-        from django.core.management import call_command
-
-        sign_in(self.client, "colab.demo")
-        call_command("reset_mfa", "colab.demo", stdout=StringIO())
-        self.user.refresh_from_db()
-        self.assertFalse(self.user.totp_enabled)
-        self.assertFalse(TrustedDevice.objects.filter(revoked=False).exists())

@@ -1,12 +1,12 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { Navigate, useNavigate } from 'react-router-dom'
-import { MfaStep } from '../components/MfaStep'
 import { PasswordInput } from '../components/PasswordInput'
 import { Button } from '../components/ui/Button'
 import { ALERT_ERROR, FIELD, LABEL } from '../components/ui/styles'
 import { useAuth } from '../context/AuthContext'
 import { errorMessage } from '../lib/api'
 import { mediaUrl } from '../lib/media'
+import { detectPrivateMode } from '../lib/privateMode'
 
 // Textos de marketing del panel izquierdo. Mantenerlos alineados con las reglas reales (escala, cierre).
 const FEATURES = [
@@ -18,13 +18,38 @@ const FEATURES = [
 
 // El usuario ingresa con su identificador; puede cambiar la contraseña voluntariamente desde el menú.
 export function LoginPage() {
-  const { user, login, verifyMfa } = useAuth()
+  const { user, login } = useAuth()
   const navigate = useNavigate()
   const [form, setForm] = useState({ username: '', password: '' })
   const [error, setError] = useState(null)
   const [loading, setLoading] = useState(false)
-  // Desafío 2FA pendiente: la contraseña ya se validó, falta el código de la app.
-  const [challenge, setChallenge] = useState(null)
+  const [privateMode, setPrivateMode] = useState(false)
+  // Los campos se habilitan solo cuando termina la verificación del navegador (unos segundos en Chromium).
+  const [checking, setChecking] = useState(true)
+
+  // Ventanas privadas/incógnito: si hay evidencia suficiente, no se permite escribir usuario ni contraseña.
+  // Ante duda o error el detector devuelve false y el formulario se habilita con normalidad.
+  useEffect(() => {
+    let active = true
+    // Tope de espera: aunque el equipo esté muy cargado, el formulario se habilita como máximo en 5 s.
+    const fallback = window.setTimeout(() => { if (active) setChecking(false) }, 5000)
+    detectPrivateMode()
+      .then((isPrivate) => {
+        if (active && isPrivate) {
+          console.warn('Permiso no autorizado')
+          setPrivateMode(true)
+        }
+      })
+      .finally(() => {
+        window.clearTimeout(fallback)
+        if (active) setChecking(false)
+      })
+    return () => {
+      active = false
+      window.clearTimeout(fallback)
+    }
+  }, [])
+  const locked = checking || privateMode
 
   if (user) return <Navigate to={user.role === 'boss' || user.role === 'superadmin' ? '/dashboard' : '/evaluations'} replace />
 
@@ -33,45 +58,17 @@ export function LoginPage() {
   async function onSubmit(e) {
     e.preventDefault()
     setError(null)
+    if (locked) return
     setLoading(true)
     try {
       // login devuelve el usuario para decidir el destino sin esperar a que el contexto se actualice.
-      // Ventanas privadas incluidas: un navegador no verificado recibe el desafío 2FA.
-      const result = await login({ ...form, username: form.username.trim() })
-      if (result?.mfa_required) {
-        setChallenge(result)
-        return
-      }
-      goHome(result)
+      const authenticatedUser = await login({ ...form, username: form.username.trim(), private_mode: privateMode })
+      navigate(authenticatedUser.role === 'boss' || authenticatedUser.role === 'superadmin' ? '/dashboard' : '/evaluations', { replace: true })
     } catch (err) {
       setError(errorMessage(err, 'Credenciales inválidas'))
     } finally {
       setLoading(false)
     }
-  }
-
-  function goHome(authenticatedUser) {
-    navigate(authenticatedUser.role === 'boss' || authenticatedUser.role === 'superadmin' ? '/dashboard' : '/evaluations', { replace: true })
-  }
-
-  async function onVerify(code) {
-    setError(null)
-    setLoading(true)
-    try {
-      goHome(await verifyMfa(challenge.mfa_token, code))
-    } catch (err) {
-      // Desafío vencido o contraseña cambiada: hay que volver a empezar con la contraseña.
-      if (err?.data?.code === 'mfa_expired') setChallenge(null)
-      setError(errorMessage(err, 'Código incorrecto'))
-    } finally {
-      setLoading(false)
-    }
-  }
-
-  function cancelChallenge() {
-    setChallenge(null)
-    setError(null)
-    setForm((prev) => ({ ...prev, password: '' }))
   }
 
   return (
@@ -112,24 +109,26 @@ export function LoginPage() {
             <p className="mt-0.5 text-xs text-app-muted">Ingresa tus credenciales para continuar.</p>
           </div>
 
-          {challenge ? (
-            <MfaStep challenge={challenge} onVerify={onVerify} onCancel={cancelChallenge} error={error} loading={loading} />
-          ) : (
           <form onSubmit={onSubmit} className="flex flex-col gap-2.5">
+            {checking && <p role="status" className="text-xs text-app-muted">Verificando navegador…</p>}
+            {privateMode && (
+              <div role="alert" className={ALERT_ERROR}>
+                No se permite el acceso desde una ventana privada o de incógnito. Usa una ventana normal del navegador.
+              </div>
+            )}
             {error && <div role="alert" className={ALERT_ERROR}>{error}</div>}
             <label className={LABEL}>
               Usuario
-              <input className={FIELD} name="username" autoComplete="username" value={form.username} onChange={onChange} required />
+              <input className={FIELD} name="username" autoComplete="username" value={form.username} onChange={onChange} disabled={locked} required />
             </label>
             <label className={LABEL}>
               Contraseña
-              <PasswordInput name="password" autoComplete="current-password" value={form.password} onChange={onChange} required />
+              <PasswordInput name="password" autoComplete="current-password" value={form.password} onChange={onChange} disabled={locked} required />
             </label>
-            <Button type="submit" loading={loading} fullWidth className="mt-1 !bg-[#c02645] hover:!bg-[#a71932] focus-visible:!ring-[#c02645]/50">
+            <Button type="submit" loading={loading} disabled={locked} fullWidth className="mt-1 !bg-[#c02645] hover:!bg-[#a71932] focus-visible:!ring-[#c02645]/50">
               {loading ? 'Ingresando...' : 'Iniciar sesión'}
             </Button>
           </form>
-          )}
         </div>
       </main>
     </div>

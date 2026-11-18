@@ -14,13 +14,13 @@ def enforce_csrf(request):
 
 
 def enforce_device(request, validated_token):
-    """La sesion solo es valida desde su navegador registrado y con la doble autenticacion vigente."""
+    """La sesion con claim de dispositivo solo es valida desde ese dispositivo registrado."""
     from users.devices import DEVICE_CLAIM, find_device
-    from users.mfa import is_trusted
 
     claimed = validated_token.get(DEVICE_CLAIM)
-    device = find_device(request, validated_token.get("user_id"), claimed) if claimed is not None else None
-    if not is_trusted(device):
+    if claimed is None:  # sesiones anteriores a esta version: se ligan al renovarlas
+        return
+    if find_device(request, validated_token.get("user_id"), claimed) is None:
         raise exceptions.AuthenticationFailed("Device not recognized.")
 
 

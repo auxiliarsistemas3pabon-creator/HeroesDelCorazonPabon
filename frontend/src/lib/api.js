@@ -39,10 +39,9 @@ export function errorMessage(error, fallback = 'Ocurrió un error') {
     console.warn('Permiso no autorizado')
     return securityCode === 'user_not_found' ? 'Usuario no encontrado.' : 'Acceso no autorizado.'
   }
-  // Doble autenticación (segundo paso del login).
-  if (securityCode === 'mfa_invalid') return 'Código incorrecto. Revisa la app de autenticación e intenta de nuevo.'
-  if (securityCode === 'mfa_expired') return 'La verificación venció. Inicia sesión de nuevo.'
-  if (securityCode === 'mfa_locked') return 'Demasiados códigos incorrectos. Espera 15 minutos e intenta de nuevo.'
+  if (securityCode === 'private_mode') {
+    return 'No se permite el acceso desde una ventana privada o de incógnito. Usa una ventana normal del navegador.'
+  }
   // 502/503/504: el backend se está reiniciando o no responde; fetch sin status: no hay conexión.
   if (error?.status >= 502) return 'El servidor no está disponible en este momento. Intenta de nuevo en unos segundos.'
   if (error instanceof TypeError) return 'No hay conexión con el servidor. Revisa tu red e intenta de nuevo.'

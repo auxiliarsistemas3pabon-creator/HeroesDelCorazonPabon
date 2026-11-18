@@ -6,7 +6,6 @@ from . import views
 urlpatterns = [
     path("auth/csrf/", views.CsrfTokenView.as_view(), name="csrf-token"),
     path("auth/login/", views.LoginView.as_view(), name="login"),
-    path("auth/mfa/verify/", views.MfaVerifyView.as_view(), name="mfa-verify"),
     path("auth/refresh/", views.RefreshView.as_view(), name="refresh"),
     path("auth/logout/", views.LogoutView.as_view(), name="logout"),
     path("auth/me/", views.MeView.as_view(), name="me"),
@@ -17,6 +16,5 @@ urlpatterns = [
     path("users/register/", views.RegisterView.as_view(), name="register"),
     path("users/admin/", views.AdminUsersView.as_view(), name="admin-users"),
     path("users/admin/<int:user_id>/", views.AdminUsersView.as_view(), name="admin-user-detail"),
-    path("users/admin/<int:user_id>/reset-mfa/", views.ResetMfaView.as_view(), name="admin-user-reset-mfa"),
     path("users/collaborators/", views.CollaboratorsView.as_view(), name="collaborators"),
 ]
