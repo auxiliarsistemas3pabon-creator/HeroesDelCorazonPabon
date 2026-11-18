@@ -38,13 +38,6 @@ describe('detectPrivateMode', () => {
       vi.stubGlobal('navigator', { userAgent: UA.chrome, storage: { estimate: async () => ({}) } })
       expect(await detectPrivateMode()).toBe(false)
     })
-    it('usa la cuota webkit cuando existe (incógnito actual: < 2x heap)', async () => {
-      const webkit = (quota) => ({ queryUsageAndQuota: (ok) => ok(0, quota) })
-      vi.stubGlobal('navigator', { userAgent: UA.chrome, webkitTemporaryStorage: webkit(1.5 * 1073741824) })
-      expect(await detectPrivateMode()).toBe(true)
-      vi.stubGlobal('navigator', { userAgent: UA.chrome, webkitTemporaryStorage: webkit(80e9) })
-      expect(await detectPrivateMode()).toBe(false)
-    })
     it('si estimate falla deja pasar', async () => {
       vi.stubGlobal('navigator', { userAgent: UA.chrome, storage: { estimate: async () => { throw new Error('x') } } })
       expect(await detectPrivateMode()).toBe(false)
@@ -107,16 +100,6 @@ describe('detectPrivateMode', () => {
       expect(await detectPrivateMode()).toBe(false)
       delete window.openDatabase
       expect(await detectPrivateMode()).toBe(false)
-    })
-  })
-
-  describe('OPFS (Firefox/Safari recientes)', () => {
-    it('getDirectory rechazado por seguridad = privado', async () => {
-      const storage = { getDirectory: async () => { throw new DOMException('The operation is insecure.', 'SecurityError') } }
-      vi.stubGlobal('navigator', { userAgent: UA.firefox, storage })
-      expect(await detectPrivateMode()).toBe(true)
-      vi.stubGlobal('navigator', { userAgent: UA.safari, storage })
-      expect(await detectPrivateMode()).toBe(true)
     })
   })
 })

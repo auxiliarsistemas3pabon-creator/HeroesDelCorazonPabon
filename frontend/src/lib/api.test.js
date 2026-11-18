@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { api, errorMessage, SESSION_EXPIRED_EVENT } from './api'
+import { api, errorMessage } from './api'
 
 function jsonResponse(status, body) {
   return {
@@ -19,9 +19,6 @@ describe('errorMessage', () => {
   })
   it('modo privado', () => {
     expect(errorMessage({ status: 403, data: { code: 'private_mode' } })).toMatch(/incógnito/)
-  })
-  it('cuenta vinculada a otro navegador', () => {
-    expect(errorMessage({ status: 403, data: { code: 'device_not_registered' } })).toMatch(/vinculada a otro navegador/)
   })
   it('sesión no establecida', () => {
     expect(errorMessage({ code: 'SESSION_NOT_ESTABLISHED' })).toMatch(/cookie/)
@@ -92,14 +89,6 @@ describe('api', () => {
     vi.stubGlobal('fetch', fetchMock)
     expect(await api('/datos/')).toEqual({ final: true })
     expect(fetchMock.mock.calls[1][0]).toContain('/auth/refresh/')
-  })
-  it('si el servidor ya no reconoce la sesión avisa para volver al login', async () => {
-    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(jsonResponse(401, {})))
-    const listener = vi.fn()
-    window.addEventListener(SESSION_EXPIRED_EVENT, listener)
-    await expect(api('/datos/')).rejects.toMatchObject({ status: 401 })
-    window.removeEventListener(SESSION_EXPIRED_EVENT, listener)
-    expect(listener).toHaveBeenCalledTimes(1)
   })
   it('no renueva cuando la ruta es de auth', async () => {
     vi.stubGlobal('fetch', vi.fn().mockResolvedValue(jsonResponse(401, {})))

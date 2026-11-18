@@ -35,13 +35,13 @@ describe('LoginPage', () => {
     vi.spyOn(console, 'warn').mockImplementation(() => {})
   })
 
-  it('un jefe va al dashboard', async () => {
+  it('un jefe va al dashboard y envía private_mode=false', async () => {
     mockLogin.mockResolvedValue({ role: 'boss' })
     renderPage()
     fill('  ana  ', 'clave')
     fireEvent.click(screen.getByRole('button', { name: 'Iniciar sesión' }))
     expect(await screen.findByText('DASHBOARD')).toBeInTheDocument()
-    expect(mockLogin).toHaveBeenCalledWith({ username: 'ana', password: 'clave' })
+    expect(mockLogin).toHaveBeenCalledWith({ username: 'ana', password: 'clave', private_mode: false })
   })
 
   it('un colaborador va a evaluaciones', async () => {
@@ -69,23 +69,14 @@ describe('LoginPage', () => {
     expect(console.warn).toHaveBeenCalledWith('Permiso no autorizado')
   })
 
-  it('almacenamiento restringido solo avisa y no bloquea el inicio de sesión', async () => {
+  it('ventana privada bloquea el formulario', async () => {
     mockDetect.mockResolvedValue(true)
-    mockLogin.mockResolvedValue({ role: 'boss' })
     renderPage()
-    expect(await screen.findByRole('status')).toHaveTextContent(/navegador habitual/)
-    expect(screen.queryByText(/incógnito/)).not.toBeInTheDocument()
-    fill('ana', 'clave')
-    fireEvent.click(screen.getByRole('button', { name: 'Iniciar sesión' }))
-    expect(await screen.findByText('DASHBOARD')).toBeInTheDocument()
-  })
-
-  it('cuenta vinculada a otro navegador', async () => {
-    mockLogin.mockRejectedValue({ status: 403, data: { code: 'device_not_registered' } })
-    renderPage()
-    fill('ana', 'clave')
-    fireEvent.click(screen.getByRole('button', { name: 'Iniciar sesión' }))
-    expect(await screen.findByRole('alert')).toHaveTextContent(/vinculada a otro navegador/)
+    expect(await screen.findByText(/ventana privada o de incógnito/)).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Iniciar sesión' })).toBeDisabled()
+    fireEvent.submit(screen.getByRole('button', { name: 'Iniciar sesión' }).closest('form'))
+    expect(mockLogin).not.toHaveBeenCalled()
+    expect(console.warn).toHaveBeenCalledWith('Permiso no autorizado')
   })
 
   it('con sesión activa redirige', async () => {

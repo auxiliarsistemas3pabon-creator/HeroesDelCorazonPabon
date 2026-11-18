@@ -1,6 +1,7 @@
-// Heurística de almacenamiento restringido (mejor esfuerzo). NO identifica el incógnito con
-// certeza: Chrome lo oculta y puede haber falsos positivos. Solo alimenta un aviso en el login;
-// el control real es el dispositivo fijo que valida el servidor (cookie httpOnly por cuenta).
+// Detección (mejor esfuerzo) de ventanas privadas/incógnito. Ante cualquier duda
+// devuelve false: es preferible dejar pasar que bloquear a un usuario legítimo.
+// El servidor vuelve a validar el aviso `private_mode` en /auth/login/ y además
+// liga la sesión a un dispositivo registrado mediante una cookie httpOnly.
 
 function isFirefox() {
   return typeof navigator !== 'undefined' && /firefox/i.test(navigator.userAgent)
@@ -18,34 +19,13 @@ function isSafari() {
   )
 }
 
-// Cuota de almacenamiento temporal: la API webkit es la que refleja el límite de incógnito en Chromium.
-function chromiumQuota() {
-  const legacy = navigator.webkitTemporaryStorage
-  if (legacy?.queryUsageAndQuota) {
-    return new Promise((resolve) => legacy.queryUsageAndQuota((_usage, quota) => resolve(quota), () => resolve(undefined)))
-  }
-  if (!navigator.storage?.estimate) return Promise.resolve(undefined)
-  return navigator.storage.estimate().then(({ quota }) => quota)
-}
-
 async function chromiumIsPrivate() {
-  const quota = await chromiumQuota()
+  if (!navigator.storage?.estimate) return false
+  const { quota } = await navigator.storage.estimate()
   if (typeof quota !== 'number') return false
   const heapLimit = performance?.memory?.jsHeapSizeLimit ?? 1073741824
-  // En incógnito Chromium limita la cuota a una fracción de la memoria (< 2x el heap de JS);
-  // una ventana normal recibe un porcentaje del disco (decenas o cientos de GB).
-  return quota < heapLimit * 2
-}
-
-// Firefox y Safari recientes rechazan el sistema de archivos privado del origen (OPFS) en modo privado.
-async function opfsRejected() {
-  if (!navigator.storage?.getDirectory) return false
-  try {
-    await navigator.storage.getDirectory()
-    return false
-  } catch (error) {
-    return /security|transient|not allowed|insecure/i.test(`${error?.name} ${error?.message}`)
-  }
+  // En incógnito Chromium limita la cuota de almacenamiento a un valor cercano al heap de JS.
+  return quota < heapLimit
 }
 
 function firefoxIsPrivate() {
@@ -86,8 +66,8 @@ async function safariIsPrivate() {
 
 export async function detectPrivateMode() {
   try {
-    if (isFirefox()) return (await opfsRejected()) || (await firefoxIsPrivate())
-    if (isSafari()) return (await opfsRejected()) || (await safariIsPrivate())
+    if (isFirefox()) return await firefoxIsPrivate()
+    if (isSafari()) return await safariIsPrivate()
     if (isChromium()) return await chromiumIsPrivate()
   } catch {
     /* no se puede determinar */
