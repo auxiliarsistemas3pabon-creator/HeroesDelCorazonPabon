@@ -173,7 +173,7 @@ function EvaluationForm({ evaluation, onBack }) {
         <div className="flex items-center justify-between gap-3">
           <span className="text-sm text-app-muted">Seleccionados {effectiveSelected.length} · pendientes por evaluar {pending}</span>
           <Button type="submit" disabled={saving || !ready}>
-            {saving ? 'Enviando...' : 'Enviar al jefe'}
+            {saving ? 'Enviando...' : 'Enviar'}
           </Button>
         </div>
       </form>
