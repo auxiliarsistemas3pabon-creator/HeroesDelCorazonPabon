@@ -1,0 +1,17 @@
+{% load static %}<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="robots" content="noindex">
+  <title>Héroes del Corazón API</title>
+  <link rel="stylesheet" href="{% static 'security/api-gate.css' %}">
+  <script src="{% static 'security/private-window.js' %}" defer></script>
+  <script src="{% static 'security/api-gate.js' %}" defer></script>
+</head>
+<body>
+  <p id="api-status"></p>
+  <pre id="api-output" role="status">Verificando navegador…</pre>
+  <noscript><p>Activa JavaScript para ver este contenido.</p></noscript>
+</body>
+</html>

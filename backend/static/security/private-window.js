@@ -1,4 +1,5 @@
-// Bloqueo de ventanas privadas/incógnito en el login del panel de administración (/admin/).
+// Bloqueo de ventanas privadas/incógnito en las páginas del backend: login del admin (/admin/) y
+// apertura directa de los endpoints de la API en el navegador (api-gate.js).
 // Misma lógica que frontend/src/lib/privateMode.js: los campos se habilitan solo cuando termina la
 // verificación y quedan bloqueados únicamente si hay evidencia suficiente de navegación privada.
 // Ante duda, error o falta de soporte NO se bloquea (un navegador normal siempre puede entrar).
@@ -172,7 +173,7 @@
     }
     var fallback = window.setTimeout(release, FALLBACK_MS)
 
-    detectPrivate().then(function (isPrivate) {
+    window.hdcDetectPrivateWindow().then(function (isPrivate) {
       window.clearTimeout(fallback)
       if (!isPrivate) return release()
       blocked = true
@@ -187,6 +188,14 @@
       release()
     })
   }
+
+  // Reutilizable por otras páginas del backend (ver api-gate.js): una sola detección por carga.
+  var detection = null
+  window.hdcDetectPrivateWindow = function () {
+    if (!detection) detection = detectPrivate()
+    return detection
+  }
+  window.hdcPrivateWindowMessage = MESSAGE
 
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', start)
   else start()

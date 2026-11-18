@@ -58,6 +58,40 @@ class AdminLoginPrivateWindowTests(APITestCase):
         self.assertIn("login-form", source)
 
 
+class EndpointNavigationGateTests(APITestCase):
+    """Abrir un endpoint directamente en el navegador pasa por la verificación de ventana privada."""
+
+    NAVIGATION = {"HTTP_SEC_FETCH_DEST": "document", "HTTP_SEC_FETCH_MODE": "navigate"}
+
+    def test_browser_navigation_gets_the_verification_page_not_the_content(self):
+        for path in ("/", "/api/", "/api/v1/", "/api/v1/questions/evaluations/", "/api/v1/auth/me/"):
+            with self.subTest(path=path):
+                response = self.client.get(path, **self.NAVIGATION)
+                self.assertEqual(response.status_code, 200)
+                self.assertContains(response, "security/api-gate.js")
+                self.assertNotContains(response, "endpoints")  # el contenido real no viaja en la página
+                self.assertEqual(response["Cache-Control"], "no-store")
+                self.assertIn("Sec-Fetch-Dest", response["Vary"])
+
+    def test_app_requests_and_other_clients_get_the_normal_response(self):
+        # fetch de la app (Sec-Fetch-Dest: empty), health check de Render y curl (sin cabeceras).
+        fetch = {"HTTP_SEC_FETCH_DEST": "empty", "HTTP_SEC_FETCH_MODE": "cors"}
+        for headers in (fetch, {}):
+            with self.subTest(headers=headers):
+                self.assertEqual(self.client.get("/api/", **headers).json()["version"], "v1")
+                self.assertEqual(self.client.get("/", **headers).json(), {"status": "ok"})
+                self.assertEqual(self.client.get("/api/v1/questions/evaluations/", **headers).status_code, 401)
+
+    def test_admin_and_static_files_are_not_intercepted(self):
+        response = self.client.get("/admin/login/", **self.NAVIGATION)
+        self.assertContains(response, 'id="login-form"')
+        self.assertNotContains(response, "api-gate.js")
+
+    def test_only_reads_are_intercepted(self):
+        response = self.client.post(LOGIN, {"username": "nadie", "password": "x"}, format="json", **self.NAVIGATION)
+        self.assertNotEqual(response["Content-Type"].split(";")[0], "text/html")
+
+
 class LoginSecurityTests(APITestCase):
     def setUp(self):
         self.user = create_user("colab.demo")

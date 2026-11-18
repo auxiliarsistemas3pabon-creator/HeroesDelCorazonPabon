@@ -27,6 +27,17 @@ server {
         proxy_hide_header Server;
     }
 
+    # Scripts/estilos de la página de verificación de ventana privada que el backend sirve al abrir
+    # /api/... directamente en el navegador: deben salir del mismo origen que la página (CSP 'self').
+    location /static/security/ {
+        proxy_pass ${API_UPSTREAM};
+        proxy_http_version 1.1;
+        proxy_set_header Host $proxy_host;
+        proxy_ssl_server_name on;
+        proxy_hide_header X-Powered-By;
+        proxy_hide_header Server;
+    }
+
     location /ws/ {
         proxy_pass ${API_UPSTREAM};
         proxy_http_version 1.1;

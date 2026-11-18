@@ -73,6 +73,8 @@ MIDDLEWARE = [
     'django.contrib.messages.middleware.MessageMiddleware',
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
     'csp.middleware.CSPMiddleware',
+    # Endpoints abiertos directamente en el navegador: verificación de ventana privada antes de mostrar el contenido.
+    'common.navigation.PrivateWindowGateMiddleware',
     'axes.middleware.AxesMiddleware',
 ]
 
