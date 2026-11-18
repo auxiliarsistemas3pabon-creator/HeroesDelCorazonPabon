@@ -19,7 +19,13 @@ from common.permissions import (
 )
 from users.models import User
 
-from .limits import assigned_personal, find_evaluation, monthly_limit, program_completed, scored_this_month
+from .limits import (
+    assigned_personal,
+    find_evaluation,
+    monthly_limit,
+    program_completed,
+    scored_this_month,
+)
 from .models import Category, Evaluation, EvaluationSetting, Question
 from .notifications import notify_review
 from .serializers import QuestionCreateSerializer, QuestionSerializer

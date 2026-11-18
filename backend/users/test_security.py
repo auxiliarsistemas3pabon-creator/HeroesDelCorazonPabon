@@ -37,6 +37,27 @@ class MaliciousInputDetectionTests(SimpleTestCase):
                 self.assertFalse(looks_malicious(text))
 
 
+class AdminLoginPrivateWindowTests(APITestCase):
+    """El login del panel de administración carga el mismo bloqueo de ventanas privadas que el frontend."""
+
+    def test_admin_login_loads_the_private_window_check(self):
+        response = self.client.get("/admin/login/")
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'src="/static/security/private-window.js"')
+        self.assertContains(response, 'id="login-form"')
+
+    def test_private_window_script_is_a_static_file(self):
+        from django.contrib.staticfiles import finders
+
+        path = finders.find("security/private-window.js")
+        self.assertIsNotNone(path)
+        with open(path, encoding="utf-8") as script:
+            source = script.read()
+        # Nunca bloquea ante duda: el bloqueo exige las 3 mediciones claramente privadas.
+        self.assertIn("PRIVATE_BELOW = 1.25", source)
+        self.assertIn("login-form", source)
+
+
 class LoginSecurityTests(APITestCase):
     def setUp(self):
         self.user = create_user("colab.demo")

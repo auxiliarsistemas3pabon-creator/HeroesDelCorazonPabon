@@ -1,0 +1,10 @@
+{% extends "admin/login.html" %}
+{% load static %}
+{% comment %}
+  Login del panel de administración: igual que el login del frontend, los campos se habilitan solo cuando
+  termina la verificación del navegador y quedan bloqueados en ventanas privadas/incógnito.
+  El script es un archivo estático (la CSP del backend no permite scripts en línea).
+{% endcomment %}
+{% block extrahead %}{{ block.super }}
+<script src="{% static 'security/private-window.js' %}" defer></script>
+{% endblock %}
