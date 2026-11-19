@@ -13,7 +13,8 @@ import { formatDay } from '../lib/dates'
 function EvaluationForm({ evaluation, onBack }) {
   const me = useAuth()?.user ?? null
   // Todos los endpoints se acotan por evaluación con este querystring.
-  const q = `?evaluation=${evaluation.id}`
+  // participant=1: el coordinador también evalúa; con él recibe la vista de colaborador (no la de administración).
+  const q = `?evaluation=${evaluation.id}&participant=1`
   const [quota, setQuota] = useState(null)
   const [categories, setCategories] = useState([])
   const [people, setPeople] = useState([])
@@ -212,7 +213,7 @@ export function EvaluationPage({ kind = 'group' }) {
   const texts = MODULES[kind]
 
   useEffect(() => {
-    api('/questions/evaluations/')
+    api('/questions/evaluations/?participant=1')
       .then(setAll)
       .catch((e) => setError(errorMessage(e)))
   }, [])

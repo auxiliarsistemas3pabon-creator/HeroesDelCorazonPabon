@@ -18,7 +18,7 @@ def max_monthly_limit(areas):
     """
     sizes = Counter(
         area
-        for area in User.objects.filter(role__in=[User.Role.COLLABORATOR, User.Role.PERSONAL], is_active=True)
+        for area in User.objects.filter(role__in=User.PARTICIPANT_ROLES, is_active=True)
         .exclude(area="")
         .values_list("area", flat=True)
         if not is_removed_area(area) and (areas is None or area in areas)
@@ -75,7 +75,7 @@ def assigned_personal(collaborator, evaluation):
     The draw is deterministic for (evaluation, collaborator, round): it never changes between requests, and already scored
     people stay in it, so the collaborator just works through a fixed list. A new month or reprogramming starts a new draw.
     """
-    pool = User.objects.filter(role__in=[User.Role.COLLABORATOR, User.Role.PERSONAL], is_active=True, area=collaborator.area).exclude(pk=collaborator.pk)
+    pool = User.objects.filter(role__in=User.PARTICIPANT_ROLES, is_active=True, area=collaborator.area).exclude(pk=collaborator.pk)
     if collaborator.area == "":
         return []
     if evaluation.personal_ids:
@@ -107,13 +107,13 @@ def evaluation_progress(evaluation):
     if evaluation.source_id is None and evaluation.program_started_at is None:
         return {"total": 0, "done": 0, "pending": 0, "pending_evaluators": []}
     people = list(
-        User.objects.filter(role__in=[User.Role.COLLABORATOR, User.Role.PERSONAL], is_active=True)
+        User.objects.filter(role__in=User.PARTICIPANT_ROLES, is_active=True)
         .exclude(area="")
         .values("pk", "role", "area", "first_name", "last_name", "username")
     )
     evaluators = [
         person for person in people
-        if person["role"] == User.Role.COLLABORATOR
+        if person["role"] in User.PARTICIPANT_ROLES
         and (evaluation.areas is None or person["area"] in evaluation.areas)
         and (not evaluation.evaluator_ids or person["pk"] in evaluation.evaluator_ids)
     ]

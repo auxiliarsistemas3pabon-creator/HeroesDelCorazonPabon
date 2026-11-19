@@ -82,8 +82,8 @@ class EvaluationClosingDateTests(APITestCase):
         )
 
     def test_boss_can_assign_staff_members_and_only_they_can_be_evaluated(self):
-        first = create_user("first.target", User.Role.PERSONAL, area="Emergency")
-        second = create_user("second.target", User.Role.PERSONAL, area="Emergency")
+        first = create_user("first.target", User.Role.COLLABORATOR, area="Emergency")
+        second = create_user("second.target", User.Role.COLLABORATOR, area="Emergency")
         self.client.force_authenticate(self.boss)
         evaluation = self.client.post(self.EVALUATIONS, {"name": "Personas elegidas"}, format="json").data
         url = f"{self.EVALUATIONS}{evaluation['id']}/"
@@ -103,7 +103,7 @@ class EvaluationClosingDateTests(APITestCase):
         self.client.force_authenticate(self.boss)
         outside_areas = self.client.patch(
             url,
-            {"areas": ["Emergency"], "personal_ids": [create_user("other.target", User.Role.PERSONAL, area="Cardiology").pk]},
+            {"areas": ["Emergency"], "personal_ids": [create_user("other.target", User.Role.COLLABORATOR, area="Cardiology").pk]},
             format="json",
         )
         self.assertEqual(outside_areas.status_code, 400)

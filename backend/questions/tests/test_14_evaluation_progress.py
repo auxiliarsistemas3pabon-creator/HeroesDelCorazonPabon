@@ -19,13 +19,15 @@ class EvaluationProgressTests(APITestCase):
         self.beto = create_user("progress.beto", User.Role.COLLABORATOR, area="Enfermería")
         self.beto.first_name, self.beto.last_name = "Beto", "Gil"
         self.beto.save()
-        self.people = [create_user(f"progress.p{n}", User.Role.PERSONAL, area="Enfermería") for n in range(3)]
+        self.people = [create_user(f"progress.p{n}", User.Role.COLLABORATOR, area="Enfermería") for n in range(3)]
         # Otra área: no cuenta para esta evaluación.
         create_user("progress.other", User.Role.COLLABORATOR, area="Urgencias")
         self.form = Evaluation.objects.create(name="Desempeño", created_by=self.boss)
-        # Programación (copia del formulario): es la que tiene evaluaciones esperadas.
+        # Programación (copia del formulario): es la que tiene evaluaciones esperadas. Evaluadores: solo Ana y Beto
+        # (los demás colaboradores del área solo son evaluados en estas pruebas).
         self.evaluation = Evaluation.objects.create(
-            name="Desempeño", created_by=self.boss, areas=["Enfermería"], monthly_limit=2, source=self.form
+            name="Desempeño", created_by=self.boss, areas=["Enfermería"], monthly_limit=2, source=self.form,
+            evaluator_ids=[self.ana.pk, self.beto.pk],
         )
 
     def score(self, collaborator, person):
@@ -63,6 +65,13 @@ class EvaluationProgressTests(APITestCase):
         row = self.row()
         self.assertEqual(row["evaluations_total"], 2)
         self.assertEqual([item["id"] for item in row["pending_evaluators"]], [self.ana.pk])
+
+    def test_without_chosen_evaluators_every_participant_of_the_area_evaluates(self):
+        # Sin rol "personal": los 5 colaboradores del área evalúan (2 cada uno), y el coordinador del área también.
+        Evaluation.objects.filter(pk=self.evaluation.pk).update(evaluator_ids=[])
+        self.assertEqual(self.row()["evaluations_total"], 10)
+        create_user("progress.area.boss", User.Role.BOSS, area="Enfermería")
+        self.assertEqual(self.row()["evaluations_total"], 12)
 
     def test_unprogrammed_form_expects_no_evaluations(self):
         self.client.force_authenticate(self.boss)

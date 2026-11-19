@@ -39,7 +39,8 @@ class EvaluationAreaScopeTests(APITestCase):
         self.assertEqual(mixed["personal_ids"], [colleague.pk])
         self.assertEqual(client.get(f"/api/v1/questions/form/?evaluation={excluded_evaluation.pk}").data, [])
         visible_people = [item["id"] for item in client.get("/api/v1/users/collaborators/").data]
-        self.assertEqual(visible_people, [colleague.pk])
+        # El coordinador de Emergency también participa (se puede evaluar); el de Cardiology no aparece.
+        self.assertEqual(sorted(visible_people), sorted([colleague.pk, boss.pk]))
         response = client.post(
             "/api/v1/questions/",
             {"evaluation": excluded_evaluation.pk, "personal": colleague.pk, "answers": []},

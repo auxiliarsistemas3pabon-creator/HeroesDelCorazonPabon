@@ -19,10 +19,10 @@ class GroupLimitTests(APITestCase):
         self.boss = create_user("group.boss", User.Role.BOSS)
         # Enfermería: 5 personas (máximo 4). Urgencias: 3 personas (máximo 2).
         for n in range(4):
-            create_user(f"group.nurse{n}", User.Role.PERSONAL, area="Enfermería")
+            create_user(f"group.nurse{n}", User.Role.COLLABORATOR, area="Enfermería")
         create_user("group.nurse.evaluator", User.Role.COLLABORATOR, area="Enfermería")
         for n in range(3):
-            create_user(f"group.er{n}", User.Role.PERSONAL, area="Urgencias")
+            create_user(f"group.er{n}", User.Role.COLLABORATOR, area="Urgencias")
         self.form = Evaluation.objects.create(name="Desempeño", created_by=self.boss)
         self.client.force_authenticate(self.boss)
 
@@ -62,12 +62,13 @@ class EditKeepsProgressTests(APITestCase):
         self.boss = create_user("keep.boss", User.Role.BOSS)
         self.ana = create_user("keep.ana", User.Role.COLLABORATOR, area="Enfermería")
         self.beto = create_user("keep.beto", User.Role.COLLABORATOR, area="Enfermería")
-        self.people = [create_user(f"keep.p{n}", User.Role.PERSONAL, area="Enfermería") for n in range(3)]
+        self.people = [create_user(f"keep.p{n}", User.Role.COLLABORATOR, area="Enfermería") for n in range(3)]
         form = Evaluation.objects.create(name="Desempeño", created_by=self.boss)
         self.started = timezone.now() - timedelta(hours=1)
         self.evaluation = Evaluation.objects.create(
             name="Desempeño", created_by=self.boss, areas=["Enfermería"], monthly_limit=2, source=form,
             closes_on=timezone.localdate() + timedelta(days=5), program_started_at=self.started,
+            evaluator_ids=[self.ana.pk, self.beto.pk],  # las otras 3 personas solo son evaluadas
         )
         # Ana ya terminó sus 2 evaluaciones; Beto todavía no evaluó a nadie.
         for person in self.people[:2]:
@@ -79,7 +80,8 @@ class EditKeepsProgressTests(APITestCase):
         before = evaluation_progress(self.evaluation)
         self.assertEqual((before["done"], before["pending"]), (2, 2))
         new_date = (timezone.localdate() + timedelta(days=12)).isoformat()
-        for body in ({"closes_on": new_date}, {"areas": ["Enfermería"]}, {"random_selection": True}, {"evaluator_ids": []}):
+        evaluators = {"evaluator_ids": [self.beto.pk, self.ana.pk]}
+        for body in ({"closes_on": new_date}, {"areas": ["Enfermería"]}, {"random_selection": True}, evaluators):
             with self.subTest(body=body):
                 self.assertEqual(self.client.patch(f"{URL}{self.evaluation.pk}/", body, format="json").status_code, 200)
                 self.evaluation.refresh_from_db()

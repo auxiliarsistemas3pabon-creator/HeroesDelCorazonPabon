@@ -17,7 +17,7 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 
 from audit.mixins import AuditLogMixin
-from common.permissions import MANAGER_ROLES, IsBossOrSuperAdmin, owned_by
+from common.permissions import MANAGER_ROLES, IsBossOrSuperAdmin, acts_as_manager, owned_by
 from users.areas import is_removed_area
 from users.models import User
 
@@ -127,7 +127,7 @@ def _clean_evaluator_ids(raw, areas):
     if not isinstance(raw, list) or any(not isinstance(pk, int) or isinstance(pk, bool) or pk < 1 for pk in raw):
         return None
     ids = list(dict.fromkeys(raw))
-    found = User.objects.filter(pk__in=ids, role=User.Role.COLLABORATOR, is_active=True).exclude(area="")
+    found = User.objects.filter(pk__in=ids, role__in=User.PARTICIPANT_ROLES, is_active=True).exclude(area="")
     if found.count() != len(ids):
         return None
     if any(areas is not None and area not in areas for area in found.values_list("area", flat=True)):
@@ -187,14 +187,15 @@ class EvaluationsView(AuditLogMixin, APIView):
         # leftover monthly quota and personal_ids is trimmed to people of their own area.
         evaluations = Evaluation.objects.all()
         area_person_ids = set()
-        if request.user.role not in MANAGER_ROLES:
+        manager = acts_as_manager(request)
+        if not manager:
             evaluations = evaluations.available()
             if not request.user.area:
                 evaluations = evaluations.none()
             else:
                 area_person_ids = set(
                     User.objects.filter(
-                        role__in=[User.Role.COLLABORATOR, User.Role.PERSONAL],
+                        role__in=User.PARTICIPANT_ROLES,
                         is_active=True,
                         area=request.user.area,
                     ).values_list("pk", flat=True)
@@ -220,8 +221,8 @@ class EvaluationsView(AuditLogMixin, APIView):
                 evaluations = evaluations.filter(source__isnull=False)
             evaluations = evaluations.distinct()
         # El avance (quién está pendiente) es información del jefe: no se calcula ni se envía a colaboradores.
-        data = [_evaluation_data(e, with_progress=request.user.role in MANAGER_ROLES) for e in evaluations]
-        if request.user.role not in MANAGER_ROLES:
+        data = [_evaluation_data(e, with_progress=manager) for e in evaluations]
+        if not manager:
             for evaluation, item in zip(evaluations, data):
                 item["remaining"] = max(0, evaluation_limit(evaluation) - len(scored_this_month(request.user, evaluation)))
             for item in data:
@@ -338,7 +339,7 @@ class EvaluationDetailView(AuditLogMixin, APIView):
             if areas is not None:
                 areas = list(dict.fromkeys(area.strip() for area in areas))
                 known_areas = set(
-                    User.objects.filter(role__in=[User.Role.COLLABORATOR, User.Role.PERSONAL], is_active=True)
+                    User.objects.filter(role__in=User.PARTICIPANT_ROLES, is_active=True)
                     .exclude(area="")
                     .values_list("area", flat=True)
                     .distinct()
@@ -359,7 +360,7 @@ class EvaluationDetailView(AuditLogMixin, APIView):
             personal_ids = list(dict.fromkeys(personal_ids))
             staff = User.objects.filter(
                 pk__in=personal_ids,
-                role=User.Role.PERSONAL,
+                role__in=User.PARTICIPANT_ROLES,
                 is_active=True,
             ).exclude(area="")
             if staff.count() != len(personal_ids):
@@ -428,7 +429,7 @@ class EvaluationProgramCreateView(AuditLogMixin, APIView):
         if areas is not None:
             areas = list(dict.fromkeys(area.strip() for area in areas))
             known_areas = set(
-                User.objects.filter(role__in=[User.Role.COLLABORATOR, User.Role.PERSONAL], is_active=True)
+                User.objects.filter(role__in=User.PARTICIPANT_ROLES, is_active=True)
                 .exclude(area="")
                 .values_list("area", flat=True)
                 .distinct()
@@ -449,7 +450,7 @@ class EvaluationProgramCreateView(AuditLogMixin, APIView):
         personal_ids = list(dict.fromkeys(personal_ids))
         staff = User.objects.filter(
             pk__in=personal_ids,
-            role=User.Role.PERSONAL,
+            role__in=User.PARTICIPANT_ROLES,
             is_active=True,
         ).exclude(area="")
         if staff.count() != len(personal_ids):

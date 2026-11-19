@@ -301,7 +301,7 @@ class AreasView(AuditLogMixin, APIView):
 
     def get(self, request):
         areas = (
-            User.objects.filter(role__in=[User.Role.COLLABORATOR, User.Role.PERSONAL], is_active=True)
+            User.objects.filter(role__in=User.PARTICIPANT_ROLES, is_active=True)
             .exclude(area="")
             .order_by("area")
             .values_list("area", flat=True)
@@ -318,7 +318,7 @@ class StaffCandidatesView(AuditLogMixin, APIView):
     def get(self, request):
         staff = (
             User.objects.filter(
-                role__in=[User.Role.COLLABORATOR, User.Role.PERSONAL],
+                role__in=User.PARTICIPANT_ROLES,
                 is_active=True,
             )
             .exclude(area="")
@@ -335,7 +335,7 @@ class EvaluatorsView(AuditLogMixin, APIView):
 
     def get(self, request):
         evaluators = (
-            User.objects.filter(role=User.Role.COLLABORATOR, is_active=True)
+            User.objects.filter(role__in=User.PARTICIPANT_ROLES, is_active=True)
             .exclude(area="")
             .order_by("first_name", "last_name", "id")
             .values("id", "first_name", "last_name", "area")
@@ -352,5 +352,5 @@ class CollaboratorsView(generics.ListAPIView):
     def get_queryset(self):
         user = self.request.user
         # Sin area asignada no se lista a nadie, para no exponer colaboradores de otras areas.
-        qs = User.objects.filter(role__in=[User.Role.COLLABORATOR, User.Role.PERSONAL], is_active=True).exclude(pk=user.pk)
+        qs = User.objects.filter(role__in=User.PARTICIPANT_ROLES, is_active=True).exclude(pk=user.pk)
         return qs.filter(area=user.area) if user.area else qs.none()

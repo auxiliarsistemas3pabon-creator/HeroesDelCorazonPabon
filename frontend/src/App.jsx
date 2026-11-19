@@ -38,7 +38,8 @@ class PageLoadBoundary extends Component {
 
 const MANAGERS = ['boss', 'superadmin']
 const SUPERADMIN = ['superadmin']
-const COLLABORATORS = ['collaborator']
+// Quienes evalúan y se autoevalúan: colaboradores y también el coordinador (boss).
+const COLLABORATORS = ['collaborator', 'boss']
 
 // Inicio de cada rol: jefe/superadmin -> dashboard; colaborador -> evaluar; otro rol -> sin acceso (null).
 function homeFor(role) {

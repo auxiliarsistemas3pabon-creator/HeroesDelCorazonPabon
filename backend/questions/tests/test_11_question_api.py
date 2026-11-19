@@ -75,7 +75,8 @@ class QuestionTests(APITestCase):
     def test_collaborator_list_excludes_themselves_and_other_areas(self):
         self.client.force_authenticate(self.laura)
         ids = [u["id"] for u in self.client.get("/api/v1/users/collaborators/").data]
-        self.assertEqual(ids, [self.pedro.pk])
+        # El coordinador del área también se puede evaluar; el de otra área no.
+        self.assertEqual(sorted(ids), sorted([self.pedro.pk, self.boss.pk]))
 
     def test_evaluation_area_scope_hides_evaluation_and_rejects_submission(self):
         evaluation = Evaluation.objects.create(monthly_limit=3, 
@@ -106,10 +107,14 @@ class QuestionTests(APITestCase):
         self.assertEqual(self.client.post("/api/v1/questions/", self.payload(self.pedro, incomplete), format="json").status_code, 400)
         self.assertEqual(self.client.post("/api/v1/questions/", self.payload(self.other_area), format="json").status_code, 400)
 
-    def test_boss_cannot_score_directly(self):
+    def test_boss_scores_as_a_collaborator_but_the_superadmin_cannot(self):
         self.client.force_authenticate(self.boss)
         r = self.client.post("/api/v1/questions/", self.payload(self.laura), format="json")
-        self.assertEqual(r.status_code, 403)
+        self.assertEqual(r.status_code, 201)
+        # Con las mismas reglas que un colaborador: no se evalúa a sí mismo en una evaluación grupal.
+        self.assertEqual(self.client.post("/api/v1/questions/", self.payload(self.boss), format="json").status_code, 400)
+        self.client.force_authenticate(create_user("admin.demo", User.Role.SUPERADMIN))
+        self.assertEqual(self.client.post("/api/v1/questions/", self.payload(self.pedro), format="json").status_code, 403)
 
     def submit(self, collaborator, personal, scores=ALL_SCORES):
         self.client.force_authenticate(collaborator)
@@ -139,7 +144,10 @@ class QuestionTests(APITestCase):
         sent = self.client.get("/api/v1/questions/sent/").data
         self.assertEqual(len(sent), 1)
         self.assertEqual((sent[0]["personal"], sent[0]["average"], len(sent[0]["answers"])), (self.laura.pk, 4.0, 12))
+        # El coordinador también evalúa: ve lo que él envió (nada aquí). El superadmin no participa.
         self.client.force_authenticate(self.boss)
+        self.assertEqual(self.client.get("/api/v1/questions/sent/").data, [])
+        self.client.force_authenticate(create_user("admin.demo", User.Role.SUPERADMIN))
         self.assertEqual(self.client.get("/api/v1/questions/sent/").status_code, 403)
 
     def test_only_the_boss_sees_the_submissions_and_there_is_no_review_endpoint(self):
@@ -175,11 +183,11 @@ class QuestionTests(APITestCase):
     def test_stats_count_evaluated_users(self):
         self.client.force_authenticate(self.boss)
         r = self.client.get("/api/v1/questions/stats/").data
-        self.assertEqual((r["total"], r["evaluated"], r["pending"]), (2, 0, 2))
+        # the boss belongs to Emergency and also takes part: Laura, Pedro and the boss, not the Cardiology one
+        self.assertEqual((r["total"], r["evaluated"], r["pending"]), (3, 0, 3))
         self.submit(self.pedro, self.laura)
         self.client.force_authenticate(self.boss)
         r = self.client.get("/api/v1/questions/stats/").data
-        # the boss belongs to Emergency: sees Laura and Pedro, not the Cardiology one
-        self.assertEqual((r["total"], r["evaluated"], r["pending"]), (2, 1, 1))
+        self.assertEqual((r["total"], r["evaluated"], r["pending"]), (3, 1, 2))
         self.client.force_authenticate(self.laura)
         self.assertEqual(self.client.get("/api/v1/questions/stats/").status_code, 403)

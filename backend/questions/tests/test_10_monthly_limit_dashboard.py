@@ -82,9 +82,10 @@ class MonthlyLimitAndDashboardTests(APITestCase):
 
         self.client.force_authenticate(self.boss)
         boss_data = self.client.get("/api/v1/questions/dashboard/").data
-        self.assertEqual((boss_data["staff"], boss_data["areas"], boss_data["evaluated"]), (5, 1, 1))
+        # The boss counts as staff of their area (they also take part): same numbers the collaborator sees.
+        self.assertEqual((boss_data["staff"], boss_data["areas"], boss_data["evaluated"]), (6, 1, 1))
         emergency = next(a for a in boss_data["by_area"] if a["area"] == "Emergency")
-        self.assertEqual((emergency["staff"], emergency["evaluated"]), (5, 1))
+        self.assertEqual((emergency["staff"], emergency["evaluated"]), (6, 1))
 
         self.client.force_authenticate(self.team[4])
         collaborator_data = self.client.get("/api/v1/questions/dashboard/").data

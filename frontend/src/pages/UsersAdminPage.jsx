@@ -7,7 +7,6 @@ const ROLES = [
   ['superadmin', 'Superadministrador'],
   ['boss', 'Coordinador'],
   ['collaborator', 'Colaborador'],
-  ['personal', 'Personal'],
 ]
 const PAGE_SIZE = 10
 

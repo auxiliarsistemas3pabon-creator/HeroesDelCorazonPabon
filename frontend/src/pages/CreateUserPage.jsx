@@ -9,8 +9,7 @@ import { api, errorMessage } from '../lib/api'
 
 const ROLES = [
   { value: 'collaborator', label: 'Colaborador' },
-  { value: 'personal', label: 'Personal' },
-  { value: 'boss', label: 'Coordinador' },
+  { value: 'boss', label: 'Coordinador (también evalúa y es evaluado)' },
   { value: 'superadmin', label: 'Superadministrador' },
 ]
 const EMPTY = { username: '', first_name: '', last_name: '', area: '', position: '', role: 'collaborator', password: '', confirmation: '' }

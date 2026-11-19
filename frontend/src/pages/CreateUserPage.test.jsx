@@ -47,7 +47,7 @@ describe('CreateUserPage', () => {
     render(<MemoryRouter><CreateUserPage /></MemoryRouter>)
     fillForm()
     fireEvent.click(screen.getByRole('combobox', { name: /Rol/ }))
-    fireEvent.click(screen.getByRole('option', { name: 'Coordinador' }))
+    fireEvent.click(screen.getByRole('option', { name: /^Coordinador/ }))
     fireEvent.click(screen.getByRole('button', { name: /Crear usuario/ }))
     expect(await screen.findByRole('status')).toHaveTextContent('creado como Coordinador')
     expect(mockApi).toHaveBeenCalledWith('/users/admin/7/', { method: 'PATCH', body: { role: 'boss' } })

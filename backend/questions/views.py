@@ -15,6 +15,7 @@ from common.permissions import (
     MANAGER_ROLES,
     IsBossOrSuperAdmin,
     IsCollaborator,
+    acts_as_manager,
     owned_by,
 )
 from users.models import User
@@ -87,11 +88,12 @@ class QuestionFormView(AuditLogMixin, APIView):
         everything = request.query_params.get("include_inactive") == "1"
         # Collaborators only get open evaluations; the boss (or include_inactive=1) can also read closed ones for history.
         # Access is narrowed below: a boss only sees their own evaluations, a collaborator only those available to their area.
-        open_only = not (everything or request.user.role in MANAGER_ROLES)
+        manager = acts_as_manager(request)
+        open_only = not (everything or manager)
         evaluation = find_evaluation(request.query_params.get("evaluation"), open_only=open_only)
         if (
             evaluation
-            and request.user.role not in MANAGER_ROLES
+            and not manager
             and (
                 not request.user.area
                 or (evaluation.areas is not None and request.user.area not in evaluation.areas)
@@ -286,7 +288,7 @@ class ResultsSummaryView(AuditLogMixin, APIView):
             for row in qs.values("personal").annotate(last=Max("created_at"))
         }
 
-        people = User.objects.filter(pk__in=qs.values("personal"), role__in=[User.Role.COLLABORATOR, User.Role.PERSONAL]).order_by("first_name", "last_name")
+        people = User.objects.filter(pk__in=qs.values("personal"), role__in=User.PARTICIPANT_ROLES).order_by("first_name", "last_name")
         categories = (
             Category.objects.filter(evaluation__in=evaluations)
             if all_evaluations else evaluation.categories.all()
@@ -368,7 +370,7 @@ class StatsView(AuditLogMixin, APIView):
 
     def get(self, request):
         own_answers = _in_range(request, _boss_questions(request.user, _approved()))
-        collaborators = User.objects.filter(role__in=[User.Role.COLLABORATOR, User.Role.PERSONAL], is_active=True)
+        collaborators = User.objects.filter(role__in=User.PARTICIPANT_ROLES, is_active=True)
         if request.user.area:
             collaborators = collaborators.filter(area=request.user.area)
         else:
@@ -470,8 +472,8 @@ class QuotaView(AuditLogMixin, APIView):
         })
 
 
-# Scope trap: the boss branch counts only collaborators, while the collaborator branch counts every active user
-# (bosses included) of their own area.
+# The manager branch counts participants (collaborators and bosses); the collaborator branch counts every active user
+# of their own area. Within one area both give the same number unless a superadmin has that area.
 class DashboardView(AuditLogMixin, APIView):
     """GET /questions/dashboard/: devuelve personal e indicadores de evaluados para el usuario autenticado.
 
@@ -487,7 +489,7 @@ class DashboardView(AuditLogMixin, APIView):
         if request.user.role in MANAGER_ROLES:
             users = _in_range(
                 request,
-                User.objects.filter(is_active=True, role=User.Role.COLLABORATOR),
+                User.objects.filter(is_active=True, role__in=User.PARTICIPANT_ROLES),
                 field="date_joined",
             )
             if request.user.area:

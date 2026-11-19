@@ -14,11 +14,13 @@ class IsSuperAdmin(BasePermission):
 
 
 class IsCollaborator(BasePermission):
+    """Evaluar y autoevaluarse: colaboradores y también el coordinador (boss), que participa como colaborador."""
+
     message = _("Only a collaborator can perform this action.")
 
     def has_permission(self, request, view):
         user = request.user
-        return bool(user and user.is_authenticated and user.role == User.Role.COLLABORATOR)
+        return bool(user and user.is_authenticated and user.role in User.PARTICIPANT_ROLES)
 
 
 class IsBoss(BasePermission):
@@ -39,6 +41,17 @@ class IsBossOrSuperAdmin(BasePermission):
     def has_permission(self, request, view):
         user = request.user
         return bool(user and user.is_authenticated and user.role in MANAGER_ROLES)
+
+
+def acts_as_manager(request):
+    """True when the request gets the manager view (every evaluation, closed ones included, with progress).
+
+    The boss is also a participant: on the "Evaluar"/"Autoevaluación" pages the frontend sends ?participant=1 and the
+    boss gets exactly the collaborator view (open evaluations of their area, own quota). The superadmin never participates.
+    """
+    user = request.user
+    as_participant = request.query_params.get("participant") == "1" and user.role in User.PARTICIPANT_ROLES
+    return user.role in MANAGER_ROLES and not as_participant
 
 
 def owned_by(user, field="created_by"):

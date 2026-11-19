@@ -168,7 +168,7 @@ class AdminAndDirectoryViewTests(APITestCase):
         self.boss = create_user("boss.demo", User.Role.BOSS, area="Cardiologia")
         self.colab = create_user("colab.demo", User.Role.COLLABORATOR, area="Cardiologia")
         self.colab2 = create_user("colab2.demo", User.Role.COLLABORATOR, area="Cardiologia")
-        self.personal = create_user("pers.demo", User.Role.PERSONAL, area="Cardiologia")
+        self.personal = create_user("pers.demo", User.Role.COLLABORATOR, area="Cardiologia")
         self.client_admin = APIClient()
         login(self.client_admin, username_for("admin.demo"))
 
@@ -247,13 +247,16 @@ class AdminAndDirectoryViewTests(APITestCase):
         candidates = boss_client.get("/api/v1/users/staff-candidates/")
         self.assertEqual(candidates.status_code, 200)
         self.assertEqual({p["first_name"] for p in candidates.data}, {"Demo"})
-        self.assertEqual(len(candidates.data), 3)  # colab, colab2, personal
+        self.assertEqual(len(candidates.data), 4)  # colab, colab2, pers (now a collaborator) and the boss
         evaluators = boss_client.get("/api/v1/users/evaluators/")
-        self.assertEqual(len(evaluators.data), 2)
+        self.assertEqual(len(evaluators.data), 4)  # the same people: every participant also evaluates
         colab_client = APIClient()
         login(colab_client, username_for("colab.demo"))
         mine = colab_client.get("/api/v1/users/collaborators/")
-        self.assertEqual({u["username"] for u in mine.data}, {username_for("colab2.demo"), username_for("pers.demo")})
+        self.assertEqual(
+            {u["username"] for u in mine.data},
+            {username_for("colab2.demo"), username_for("pers.demo"), username_for("boss.demo")},
+        )
         self.assertEqual(colab_client.get("/api/v1/users/staff-candidates/").status_code, 403)
 
     def test_collaborators_without_area_returns_empty(self):

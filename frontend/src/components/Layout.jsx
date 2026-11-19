@@ -24,8 +24,14 @@ const BOSS_LINKS = [
   { to: '/evaluations-list', label: 'Lista de evaluaciones', icon: List },
 ]
 
+const COLLABORATOR_LINKS = [
+  { to: '/evaluations', label: 'Evaluar', icon: ClipboardList },
+  { to: '/self-evaluation', label: 'Autoevaluación', icon: UserCheck },
+]
+
 const LINKS = {
-  boss: BOSS_LINKS,
+  // El coordinador administra y además participa como colaborador (evalúa y se autoevalúa).
+  boss: [...BOSS_LINKS, ...COLLABORATOR_LINKS],
   // El superadmin hace todo lo del jefe y además carga datos (personal y evaluaciones).
   superadmin: [
     ...BOSS_LINKS,
@@ -40,10 +46,7 @@ const LINKS = {
     },
     { to: '/staff', label: 'Cargar datos', icon: Users },
   ],
-  collaborator: [
-    { to: '/evaluations', label: 'Evaluar', icon: ClipboardList },
-    { to: '/self-evaluation', label: 'Autoevaluación', icon: UserCheck },
-  ],
+  collaborator: COLLABORATOR_LINKS,
 }
 
 const ROLE_LABELS = { boss: 'Coordinador', superadmin: 'Administrador', collaborator: 'Colaborador' }

@@ -71,7 +71,7 @@ class SelfEvaluationTests(APITestCase):
         self.assertEqual([item["id"] for item in progress["pending_evaluators"]], [self.beto.pk])
 
     def test_group_programming_still_forbids_evaluating_yourself(self):
-        create_user("self.p1", User.Role.PERSONAL, area="Enfermería")
+        create_user("self.p1", User.Role.COLLABORATOR, area="Enfermería")
         group_id = self.program(kind="group", monthly_limit=1).data["id"]
         self.assertEqual(self.answer(self.ana, group_id, self.ana).status_code, 400)
 
@@ -86,7 +86,7 @@ class SelfEvaluationTests(APITestCase):
 
     def test_results_summary_filters_by_kind(self):
         """Resultados: ?kind separa grupales de individuales (también en "Todas" y en la evaluación por defecto)."""
-        person = create_user("self.p2", User.Role.PERSONAL, area="Enfermería")
+        person = create_user("self.p2", User.Role.COLLABORATOR, area="Enfermería")
         self_id = self.program().data["id"]
         group_id = self.program(kind="group", monthly_limit=1).data["id"]
         self.assertEqual(self.answer(self.ana, self_id, self.ana).status_code, 201)

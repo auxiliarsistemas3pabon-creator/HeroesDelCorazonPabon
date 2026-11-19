@@ -42,8 +42,11 @@ class User(AbstractUser):
         SUPERADMIN = "superadmin",_("Superadmin")
         BOSS = "boss", _("Area boss")
         COLLABORATOR = "collaborator", _("Collaborator")
-        # Plain staff member who gets evaluated: not an evaluator (collaborator), boss or admin, and never signs in.
-        PERSONAL = "personal", _("Evaluated staff")
+        # The former "personal" role (evaluated staff) was merged into collaborator (migration 0016).
+
+    # Roles that take part in evaluations: they evaluate colleagues of their area, self-evaluate and get evaluated.
+    # The boss (coordinator) also takes part, besides managing evaluations. The superadmin does not.
+    PARTICIPANT_ROLES = (Role.BOSS, Role.COLLABORATOR)
 
     role = models.CharField(
         _("Role"),

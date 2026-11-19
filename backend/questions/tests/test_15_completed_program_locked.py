@@ -21,11 +21,12 @@ class CompletedProgramLockedTests(APITestCase):
     def setUp(self):
         self.boss = create_user("locked.boss", User.Role.BOSS)
         self.ana = create_user("locked.ana", User.Role.COLLABORATOR, area="Enfermería")
-        self.people = [create_user(f"locked.p{n}", User.Role.PERSONAL, area="Enfermería") for n in range(2)]
+        self.people = [create_user(f"locked.p{n}", User.Role.COLLABORATOR, area="Enfermería") for n in range(2)]
         form = Evaluation.objects.create(name="Desempeño", created_by=self.boss)
         self.evaluation = Evaluation.objects.create(
             name="Desempeño", created_by=self.boss, areas=["Enfermería"], monthly_limit=2, source=form,
             closes_on=timezone.localdate() + timedelta(days=5), program_started_at=timezone.now(),
+            evaluator_ids=[self.ana.pk],  # solo Ana evalúa; las otras dos personas solo son evaluadas
         )
         self.client.force_authenticate(self.boss)
 

@@ -16,8 +16,8 @@ class AnswersImportTests(APITestCase):
         Evaluation.objects.update(monthly_limit=3)  # programmed with the default quota
         self.boss = create_user("boss.demo", User.Role.BOSS)
         self.ana = create_user("ana", User.Role.COLLABORATOR)
-        self.luis = create_user("luis", User.Role.PERSONAL)
-        self.eva = create_user("eva", User.Role.PERSONAL)
+        self.luis = create_user("luis", User.Role.COLLABORATOR)
+        self.eva = create_user("eva", User.Role.COLLABORATOR)
         self.first = Evaluation.objects.get()
         Evaluation.objects.filter(pk=self.first.pk, created_by__isnull=True).update(created_by=self.boss)
         self.client.force_authenticate(self.boss)

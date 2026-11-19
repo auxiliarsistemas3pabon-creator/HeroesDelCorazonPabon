@@ -234,8 +234,8 @@ def import_answers(table: list[dict[str, str | int]], default_evaluation: Evalua
             errors.append(f"Fila {number}: la evaluación «{evaluation.name}» no tiene preguntas.")
             continue
 
-        collaborator = User.objects.filter(username=_pick(row, "collaborator"), role=User.Role.COLLABORATOR).first()
-        personal = User.objects.filter(username=_pick(row, "personal"), role=User.Role.PERSONAL).first()
+        collaborator = User.objects.filter(username=_pick(row, "collaborator"), role__in=User.PARTICIPANT_ROLES).first()
+        personal = User.objects.filter(username=_pick(row, "personal"), role__in=User.PARTICIPANT_ROLES).first()
         if collaborator is None or personal is None:
             errors.append(f"Fila {number}: no existe el colaborador o la persona evaluada (usa su número de documento).")
             continue

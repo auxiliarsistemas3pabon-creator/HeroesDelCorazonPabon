@@ -16,7 +16,7 @@ class Command(BaseCommand):
 
     def handle(self, *args, **options):
         areas = sorted(
-            set(User.objects.filter(role__in=[User.Role.COLLABORATOR, User.Role.PERSONAL]).exclude(area="").values_list("area", flat=True))
+            set(User.objects.filter(role__in=User.PARTICIPANT_ROLES).exclude(area="").values_list("area", flat=True))
         )
         created = 0
         for area_number, area in enumerate(areas, start=1):
@@ -28,7 +28,7 @@ class Command(BaseCommand):
                     username=username,
                     first_name=FIRST_NAMES[(area_number + number) % len(FIRST_NAMES)],
                     last_name=LAST_NAMES[(area_number * 2 + number) % len(LAST_NAMES)],
-                    role=User.Role.PERSONAL,
+                    role=User.Role.COLLABORATOR,
                     area=area,
                     position="Personal de prueba",
                 )

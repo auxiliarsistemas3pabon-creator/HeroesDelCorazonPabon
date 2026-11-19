@@ -32,7 +32,7 @@ class QuestionCreateSerializer(serializers.Serializer):
         queryset=Evaluation.objects.all(), required=False, allow_null=True
     )
     personal = serializers.PrimaryKeyRelatedField(
-        queryset=User.objects.filter(role__in=[User.Role.COLLABORATOR, User.Role.PERSONAL], is_active=True)
+        queryset=User.objects.filter(role__in=User.PARTICIPANT_ROLES, is_active=True)
     )
     answers = AnswerSerializer(many=True)
 

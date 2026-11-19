@@ -190,7 +190,7 @@ class StaffImportTests(APITestCase):
             password=PASSWORD,
             first_name="Sistema",
             last_name="Legado",
-            role=User.Role.PERSONAL,
+            role=User.Role.COLLABORATOR,
             area="Sistema",
         )
         sistemas_staff = User.objects.create_user(
@@ -198,7 +198,7 @@ class StaffImportTests(APITestCase):
             password=PASSWORD,
             first_name="Sistemas",
             last_name="Actual",
-            role=User.Role.PERSONAL,
+            role=User.Role.COLLABORATOR,
             area="Sistemas",
         )
         sistemas_collaborator = create_user("collaborator-sistemas", area="Sistemas")
