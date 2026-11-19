@@ -131,15 +131,35 @@ CAPA 9 · Control de acceso por rol (RBAC) en el servidor
                 El superadmin NO puede enviar evaluaciones (403); el
                 coordinador sí, con las mismas reglas que un colaborador.
 
-CAPA 17 · Bloqueo de ventanas privadas / incógnito
-  Qué protege : sesiones en ventanas que no dejan rastro en equipos compartidos.
+CAPA 17 · Ventanas privadas y acceso directo a los endpoints solo desde /admin/
+  Qué protege : sesiones en ventanas que no dejan rastro en equipos compartidos, y
+                que cualquiera abra las rutas del backend escribiéndolas en el navegador.
   Dónde       : frontend/src/lib/privateMode.js; LoginView (private_mode);
-                common/navigation.py (página intermedia al abrir /api/ en el navegador)
-  Cómo probar : 1. Abra la app en una ventana de incógnito (Ctrl+Mayús+N).
-                2. Abra http://localhost:8001/api/v1/ directamente en una
-                   ventana de incógnito.
-  Esperado    : 1. El formulario de login queda deshabilitado con el aviso de
-                   ventanas privadas. 2. No se muestra el contenido JSON.
+                common/navigation.py (PrivateWindowGateMiddleware);
+                templates/security/unauthorized.html; templates/admin/index.html
+  Regla       : abrir directamente en el navegador /, /api/... solo se permite con
+                una sesión iniciada en el panel /admin/ (cuenta activa y "staff").
+                Sin ella: 403 "Acceso no autorizado." y un evento
+                security.direct_navigation en la auditoría. Una sesión de la app NO
+                cuenta: hay que entrar por /admin/.
+  Cómo probar : 1. Sin sesión en /admin/, escriba en la barra:
+                     https://heroesdelcorazon-pabon.onrender.com/api/v1/auth/me
+                     http://localhost:8001/
+                2. Entre a /admin/ con una cuenta staff (createsuperuser). En el
+                   inicio aparece "Endpoints de la API"; ábralos desde ahí (o vuelva
+                   a escribir las URL del paso 1 en esa misma ventana).
+                3. Salga de /admin/ (Cerrar sesión) y repita el paso 1.
+                4. Abra la app en una ventana de incógnito (Ctrl+Mayús+N).
+                5. Con sesión en /admin/, abra un endpoint en una ventana de incógnito.
+  Esperado    : 1 y 3: "HTTP 403 — Acceso no autorizado." (ni JSON ni "HTTP 200").
+                2: se verifica la ventana y se muestra el contenido.
+                4: el formulario de login queda deshabilitado (ventanas privadas).
+                5: no se muestra el contenido.
+  Alcance     : esta capa es del NAVEGADOR. La app (fetch) y las herramientas como
+                Postman o curl no "navegan": no pasan por aquí. A esas peticiones las
+                controla la autenticación de la API (capas 5 a 9): sin sesión, los
+                datos responden 401/403. "/" devuelve solo {"status": "ok"} (chequeo
+                de salud, sin datos) y /api/v1/ un índice de rutas públicas.
 
 CAPA 18 · Contraseña inicial con cambio obligatorio
   Qué protege : la contraseña inicial Pabon2026* la conoce todo el mundo.

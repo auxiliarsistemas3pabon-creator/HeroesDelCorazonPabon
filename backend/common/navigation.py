@@ -27,8 +27,19 @@ def is_document_navigation(request) -> bool:
     )
 
 
+def has_admin_session(request) -> bool:
+    """Sesión iniciada en el panel /admin/ (cuenta activa con acceso al admin de Django)."""
+    user = getattr(request, "user", None)
+    return bool(user and user.is_authenticated and user.is_active and user.is_staff)
+
+
 class PrivateWindowGateMiddleware:
-    """Sirve la página intermedia de verificación en las navegaciones directas a los endpoints."""
+    """Navegaciones directas a los endpoints: solo desde una sesión del panel /admin/ (capa 17).
+
+    Sin sesión de administración responde 403 "Acceso no autorizado" y lo deja en la auditoría. Con ella, la
+    página intermedia verifica la ventana (privada o normal) y luego muestra el contenido.
+    La app y los clientes que no navegan no pasan por aquí: su acceso lo controla la autenticación de la API.
+    """
 
     def __init__(self, get_response):
         self.get_response = get_response
@@ -36,9 +47,15 @@ class PrivateWindowGateMiddleware:
     def __call__(self, request):
         if not is_document_navigation(request):
             return self.get_response(request)
-        response = render(request, "security/api_gate.html")
+        if has_admin_session(request):
+            response = render(request, "security/api_gate.html")
+        else:
+            from .security import log_unauthorized
+
+            log_unauthorized(request, "direct_navigation")
+            response = render(request, "security/unauthorized.html", status=403)
         response["Cache-Control"] = "no-store"
         response["X-Robots-Tag"] = "noindex"
-        # La misma URL responde distinto a una navegación y a un fetch: las cachés deben distinguirlas.
-        patch_vary_headers(response, ("Sec-Fetch-Dest", "Sec-Fetch-Mode"))
+        # La misma URL responde distinto a una navegación y a un fetch (y según la sesión del admin).
+        patch_vary_headers(response, ("Sec-Fetch-Dest", "Sec-Fetch-Mode", "Cookie"))
         return response

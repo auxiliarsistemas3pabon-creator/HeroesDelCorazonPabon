@@ -422,7 +422,7 @@ Una clínica requiere como mínimo 7 capas de seguridad; este proyecto implement
 | 14 | Registro estructurado de auditoría y seguridad | `audit/logging.py` (+ Sentry si hay `SENTRY_DSN`) |
 | 15 | Minimización de información expuesta | nginx `server_tokens off`, `DEBUG=False`, mensajes genéricos |
 | 16 | Gestión de secretos | variables de entorno; `prod.py` exige `DJANGO_SECRET_KEY` ≥ 50 |
-| 17 | Bloqueo de ventanas privadas | `lib/privateMode.js`, `common/navigation.py` |
+| 17 | Bloqueo de ventanas privadas y acceso directo a los endpoints solo desde una sesión de `/admin/` (si no, 403 "Acceso no autorizado.") | `lib/privateMode.js`, `common/navigation.py`, `templates/admin/index.html` |
 | 18 | Contraseña inicial con cambio obligatorio | `enforce_password_change`, `PasswordChangeView` |
 | 19 | Ciclo de vida de cuentas (inhabilitar, ≥1 superadmin) | `AdminUsersView` |
 | 20 | Cierre de sesión por inactividad | `frontend/src/lib/useIdleLogout.js` |

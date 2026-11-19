@@ -2,6 +2,7 @@
 from django.test import SimpleTestCase
 from rest_framework.test import APIClient, APITestCase
 
+from audit.models import AuditEvent
 from common.security import looks_malicious
 from common.testing import random_password, username_for
 
@@ -63,12 +64,39 @@ class AdminLoginPrivateWindowTests(APITestCase):
 
 
 class EndpointNavigationGateTests(APITestCase):
-    """Abrir un endpoint directamente en el navegador pasa por la verificación de ventana privada."""
+    """Abrir un endpoint directamente en el navegador solo se permite desde una sesión del panel /admin/."""
 
     NAVIGATION = {"HTTP_SEC_FETCH_DEST": "document", "HTTP_SEC_FETCH_MODE": "navigate"}
+    PATHS = ("/", "/api/", "/api/v1/", "/api/v1/questions/evaluations/", "/api/v1/auth/me/")
 
-    def test_browser_navigation_gets_the_verification_page_not_the_content(self):
-        for path in ("/", "/api/", "/api/v1/", "/api/v1/questions/evaluations/", "/api/v1/auth/me/"):
+    def admin_session(self, **extra):
+        staff = User.objects.create_user(
+            username=username_for("panel.admin"), password=PASSWORD, first_name="Panel", last_name="Admin",
+            role=User.Role.SUPERADMIN, is_staff=True, **extra,
+        )
+        self.client.force_login(staff)  # sesión del panel /admin/ (no JWT)
+        return staff
+
+    def test_browser_navigation_outside_the_admin_panel_is_unauthorized(self):
+        for path in self.PATHS:
+            with self.subTest(path=path):
+                response = self.client.get(path, **self.NAVIGATION)
+                self.assertEqual(response.status_code, 403)
+                self.assertContains(response, "Acceso no autorizado.", status_code=403)
+                self.assertNotContains(response, "endpoints", status_code=403)
+                self.assertNotContains(response, "api-gate.js", status_code=403)
+                self.assertEqual(response["Cache-Control"], "no-store")
+                self.assertIn("Cookie", response["Vary"])
+        self.assertTrue(AuditEvent.objects.filter(action="security.direct_navigation", outcome="blocked").exists())
+
+    def test_app_session_is_not_enough_only_the_admin_panel(self):
+        # Una sesión de la app (JWT en cookie) no es una sesión del panel /admin/.
+        self.client.force_authenticate(create_user("app.only", User.Role.SUPERADMIN))
+        self.assertEqual(self.client.get("/api/v1/auth/me/", **self.NAVIGATION).status_code, 403)
+
+    def test_from_the_admin_panel_gets_the_verification_page_not_the_content(self):
+        self.admin_session()
+        for path in self.PATHS:
             with self.subTest(path=path):
                 response = self.client.get(path, **self.NAVIGATION)
                 self.assertEqual(response.status_code, 200)
@@ -76,6 +104,17 @@ class EndpointNavigationGateTests(APITestCase):
                 self.assertNotContains(response, "endpoints")  # el contenido real no viaja en la página
                 self.assertEqual(response["Cache-Control"], "no-store")
                 self.assertIn("Sec-Fetch-Dest", response["Vary"])
+
+    def test_admin_panel_lists_the_endpoints(self):
+        self.admin_session()
+        response = self.client.get("/admin/", **self.NAVIGATION)
+        self.assertContains(response, 'id="api-endpoints"')
+        self.assertContains(response, 'href="/api/v1/auth/me/"')
+
+    def test_staff_account_that_is_not_staff_anymore_is_unauthorized(self):
+        staff = self.admin_session()
+        User.objects.filter(pk=staff.pk).update(is_staff=False)
+        self.assertEqual(self.client.get("/api/v1/", **self.NAVIGATION).status_code, 403)
 
     def test_app_requests_and_other_clients_get_the_normal_response(self):
         # fetch de la app (Sec-Fetch-Dest: empty), health check de Render y curl (sin cabeceras).
