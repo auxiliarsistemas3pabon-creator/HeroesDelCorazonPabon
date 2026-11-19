@@ -226,8 +226,8 @@ CAPA 24 · (nueva) Validación de archivos subidos — ver abajo.
 CAPA 11 · Cabeceras de seguridad y CSP
   Qué protege : clickjacking, ejecución de scripts externos, fugas por Referer.
   Dónde       : frontend/nginx/security-headers.conf; settings (CSP, X_FRAME_OPTIONS)
-  Cómo probar : curl.exe -sI https://heroesdelcorazon-pabon-1.onrender.com/
-                (o https://securityheaders.com con esa URL)
+  Cómo probar : curl.exe -sI -H "Sec-Fetch-Mode: navigate" https://heroesdelcorazon-pabon-1.onrender.com/admin/login
+                (securityheaders.com no envía Sec-Fetch-Mode: verá el 403, que ya es correcto)
   Esperado    : Content-Security-Policy, X-Frame-Options: DENY,
                 X-Content-Type-Options: nosniff, Referrer-Policy,
                 Permissions-Policy, Cross-Origin-Opener-Policy.
@@ -235,8 +235,8 @@ CAPA 11 · Cabeceras de seguridad y CSP
 CAPA 12 · HTTPS obligatorio + HSTS
   Qué protege : interceptar la conexión (Wi-Fi de la clínica, proxies).
   Dónde       : prod.py (SECURE_SSL_REDIRECT, HSTS, cookies Secure); Render
-  Cómo probar : curl.exe -sI http://heroesdelcorazon-pabon-1.onrender.com/
-                curl.exe -sI https://heroesdelcorazon-pabon.onrender.com/ | findstr /i strict
+  Cómo probar : curl.exe -sI http://heroesdelcorazon-pabon-1.onrender.com/admin/login
+                curl.exe -sI https://heroesdelcorazon-pabon.onrender.com/healthz | findstr /i strict
   Esperado    : la versión http redirige (301/308) a https; aparece
                 Strict-Transport-Security.
 
@@ -272,7 +272,7 @@ CAPA 15 · Minimización de información y respuesta única "Acceso no autorizad
                   http://localhost:8001/api/v1/no-existe/
                 Login con un documento que NO existe y con uno que SÍ existe pero con
                 clave incorrecta. Revise la pestaña Headers de Postman.
-                curl.exe -sI https://heroesdelcorazon-pabon-1.onrender.com/ | findstr /i "server x-powered"
+                curl.exe -sI -H "Sec-Fetch-Mode: navigate" https://heroesdelcorazon-pabon-1.onrender.com/admin/login | findstr /i "server x-powered"
   Esperado    : siempre el mismo cuerpo (cambia solo el número: 400/401/403/404/405);
                 ambos logins responden idéntico; no hay cabecera Allow; sin versión
                 de nginx ni X-Powered-By; nunca la página de depuración de Django.
@@ -417,8 +417,8 @@ CAPA 25 · Escaneo de vulnerabilidades en dependencias            [NUEVA]
        (https://cdn.sheetjs.com, versión 0.20.x), que corrige el aviso.
   P5 · El contenedor del backend corre como root. Recomendado: usuario sin
        privilegios en backend/docker/Dockerfile (probar el despliegue en Render).
-  P6 · RESUELTO (capa 17): el panel de Django se movió a /django-admin/. Puede
-       no predecible o restringirse por IP.
+  P6 · RESUELTO (capa 17): el panel de Django se movió a /django-admin/. Además
+       puede restringirse por IP si la clínica tiene una IP fija.
   P7 · Segundo factor (2FA) y "dispositivo fijo": se evaluaron y se decidió no
        usarlos en esta clínica (decisión del equipo).
 ===============================================================================
