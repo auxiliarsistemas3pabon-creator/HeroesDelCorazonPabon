@@ -1,0 +1,47 @@
+import { fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { beforeEach, describe, expect, it, vi } from 'vitest'
+
+const mockApi = vi.fn()
+vi.mock('../lib/api', () => ({ api: (...args) => mockApi(...args), errorMessage: () => 'error' }))
+vi.mock('../context/AuthContext', () => ({ useAuth: () => ({ realtimeEvent: null }) }))
+
+import { ResultsPage } from './ResultsPage'
+
+const EVALUATIONS = [
+  { id: 1, name: 'Desempeño grupal', kind: 'group', closes_on: '2099-12-31' },
+  { id: 2, name: 'Autoevaluación', kind: 'self', closes_on: '2099-12-31' },
+]
+const summary = (evaluation, name) => ({
+  evaluation,
+  categories: [],
+  rows: [{ personal: evaluation.id, name, area: 'Enfermería', position: '', by_category: {}, average: '4.0', performed_at: '2026-11-19' }],
+})
+
+describe('ResultsPage: tipo de programación', () => {
+  beforeEach(() => {
+    mockApi.mockReset()
+    mockApi.mockImplementation((path) => {
+      if (path.startsWith('/questions/evaluations/')) return Promise.resolve(EVALUATIONS)
+      return Promise.resolve(path.includes('kind=self')
+        ? summary(EVALUATIONS[1], 'Persona individual')
+        : summary(EVALUATIONS[0], 'Persona grupal'))
+    })
+  })
+
+  it('por defecto muestra las grupales y al elegir Individual pide solo autoevaluaciones', async () => {
+    render(<ResultsPage />)
+    expect(await screen.findByText('Persona grupal')).toBeInTheDocument()
+    expect(mockApi).toHaveBeenCalledWith(expect.stringMatching(/results-summary\/\?kind=group/))
+    expect(screen.getByText('Seleccione el tipo de programación de evaluación.')).toBeInTheDocument()
+
+    fireEvent.click(screen.getByRole('combobox', { name: /Tipo de programación/ }))
+    fireEvent.click(screen.getByRole('option', { name: 'Individual (autoevaluación)' }))
+
+    expect(await screen.findByText('Persona individual')).toBeInTheDocument()
+    await waitFor(() => expect(mockApi).toHaveBeenLastCalledWith(expect.stringMatching(/kind=self/)))
+    // El selector de evaluación solo lista las del tipo elegido.
+    fireEvent.click(screen.getByRole('combobox', { name: /^Evaluación/ }))
+    expect(screen.getByRole('option', { name: 'Autoevaluación' })).toBeInTheDocument()
+    expect(screen.queryByRole('option', { name: 'Desempeño grupal' })).not.toBeInTheDocument()
+  })
+})

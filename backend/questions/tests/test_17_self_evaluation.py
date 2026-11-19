@@ -6,7 +6,7 @@ from rest_framework.test import APITestCase
 from users.models import User
 
 from ..limits import evaluation_progress
-from ..models import Evaluation
+from ..models import Evaluation, Question
 from .helpers import create_user
 
 EVALUATIONS = "/api/v1/questions/evaluations/"
@@ -83,3 +83,30 @@ class SelfEvaluationTests(APITestCase):
 
     def test_unknown_kind_is_rejected(self):
         self.assertEqual(self.program(kind="otra").status_code, 400)
+
+    def test_results_summary_filters_by_kind(self):
+        """Resultados: ?kind separa grupales de individuales (también en "Todas" y en la evaluación por defecto)."""
+        person = create_user("self.p2", User.Role.PERSONAL, area="Enfermería")
+        self_id = self.program().data["id"]
+        group_id = self.program(kind="group", monthly_limit=1).data["id"]
+        self.assertEqual(self.answer(self.ana, self_id, self.ana).status_code, 201)
+        self.assertEqual(self.answer(self.beto, group_id, person).status_code, 201)
+        Question.objects.update(reviewed_at=timezone.now())
+
+        # Resultados limita las personas al área del jefe: se le asigna la de los evaluados.
+        self.boss.area = "Enfermería"
+        self.boss.save(update_fields=["area"])
+        self.client.force_authenticate(self.boss)
+        url = "/api/v1/questions/results-summary/"
+
+        def people(query):
+            return [row["personal"] for row in self.client.get(f"{url}?{query}").data["rows"]]
+
+        self.assertEqual(self.client.get(f"{url}?kind=group").data["evaluation"]["id"], group_id)
+        self.assertEqual(self.client.get(f"{url}?kind=self").data["evaluation"]["id"], self_id)
+        self.assertEqual(people("kind=group&evaluation=all"), [person.pk])
+        self.assertEqual(people("kind=self&evaluation=all"), [self.ana.pk])
+        # Una evaluación de otro tipo no se mezcla.
+        self.assertEqual(self.client.get(f"{url}?kind=group&evaluation={self_id}").data["rows"], [])
+        self.assertEqual(sorted(people("evaluation=all")), sorted([person.pk, self.ana.pk]))
+        self.assertEqual(self.client.get(f"{url}?kind=otra").status_code, 400)

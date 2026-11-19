@@ -245,12 +245,18 @@ class ResultsSummaryView(AuditLogMixin, APIView):
 
     Acepta ?evaluation=<id> o ?evaluation=all; sin filtro usa una evaluación disponible. Admite filtros de fecha
     y restringe las personas al área del jefe cuando tiene una asignada.
+    ?kind=group|self limita a las programaciones grupales o individuales (autoevaluación); sin kind, ambas.
     """
 
     permission_classes = [IsBossOrSuperAdmin]
 
     def get(self, request):
         evaluations = _boss_evaluations(request.user)
+        kind = request.query_params.get("kind")
+        if kind:
+            if kind not in Evaluation.Kind.values:
+                return _bad("kind", "Elige programación grupal o individual.")
+            evaluations = evaluations.filter(kind=kind)
         raw = request.query_params.get("evaluation")
         all_evaluations = raw == "all"
         if all_evaluations:
@@ -262,7 +268,8 @@ class ResultsSummaryView(AuditLogMixin, APIView):
         if evaluation is None and not all_evaluations:
             return Response({"evaluation": None, "categories": [], "rows": []})
 
-        qs = _boss_questions(request.user, _approved()) if all_evaluations else _boss_questions(request.user, _approved()).filter(evaluation=evaluation)
+        qs = _boss_questions(request.user, _approved())
+        qs = qs.filter(evaluation__in=evaluations) if all_evaluations else qs.filter(evaluation=evaluation)
         if request.user.area:
             qs = qs.filter(personal__area=request.user.area)
         qs = _in_range(request, qs)
@@ -281,7 +288,7 @@ class ResultsSummaryView(AuditLogMixin, APIView):
 
         people = User.objects.filter(pk__in=qs.values("personal"), role__in=[User.Role.COLLABORATOR, User.Role.PERSONAL]).order_by("first_name", "last_name")
         categories = (
-            Category.objects.all()
+            Category.objects.filter(evaluation__in=evaluations)
             if all_evaluations else evaluation.categories.all()
         )
         return Response({

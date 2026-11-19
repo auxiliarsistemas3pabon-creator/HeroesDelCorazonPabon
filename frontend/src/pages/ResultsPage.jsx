@@ -20,6 +20,13 @@ const formatShortDate = (iso) => iso.split('-').reverse().join('/')
 const URL = '/questions/results-summary/'
 // Filas por página; el filtrado, orden y paginado se hacen en cliente sobre `data.rows`.
 const PAGE_SIZE = 4
+// Tipo de programación (Evaluation.kind): grupal = evalúan a otros; individual = autoevaluación.
+const KIND_OPTIONS = [
+  { value: 'group', label: 'Grupal' },
+  { value: 'self', label: 'Individual (autoevaluación)' },
+]
+// Evaluaciones antiguas sin `kind` se tratan como grupales (el default del modelo).
+const kindOf = (evaluation) => evaluation.kind || 'group'
 
 // Normaliza para búsquedas sin tildes ni mayúsculas ("Pérez" == "perez"): NFD separa las marcas diacríticas y se eliminan.
 function normalizeSearch(value) {
@@ -60,6 +67,8 @@ export function ResultsPage() {
   const submissionsUpdatedAt = realtimeEvent?.type === 'questions.submitted' ? realtimeEvent.sent_at : null
   const [evaluations, setEvaluations] = useState(null)
   const [evaluation, setEvaluation] = useState('')
+  // Por defecto se muestran las programaciones grupales.
+  const [kind, setKind] = useState('group')
   const [area, setArea] = useState('')
   const [person, setPerson] = useState('')
   const [position, setPosition] = useState('')
@@ -83,14 +92,13 @@ export function ResultsPage() {
   // Sin evaluación elegida el backend devuelve una por defecto (`result.evaluation`) y aquí se adopta como selección.
   // 'all' (opción "Todas") consolida todas las evaluaciones del jefe.
   useEffect(() => {
-    const params = new URLSearchParams()
+    const params = new URLSearchParams({ kind })
     if (evaluation) params.set('evaluation', evaluation)
     if (dates.from) params.set('date_from', dates.from)
     if (dates.to) params.set('date_to', dates.to)
-    const query = params.toString()
     // `ignore`: si cambia el filtro antes de responder, la respuesta vieja no pisa a la nueva.
     let ignore = false
-    api(`${URL}${query ? `?${query}` : ''}`)
+    api(`${URL}?${params}`)
       .then((result) => {
         if (ignore) return
         setError(null)
@@ -99,7 +107,10 @@ export function ResultsPage() {
       })
       .catch((e) => { if (!ignore) setError(errorMessage(e)) })
     return () => { ignore = true }
-  }, [evaluation, dates, submissionsUpdatedAt])
+  }, [kind, evaluation, dates, submissionsUpdatedAt])
+
+  // El selector de evaluación solo lista las del tipo de programación elegido.
+  const kindEvaluations = (evaluations || []).filter((item) => kindOf(item) === kind)
 
   // Los filtros Área/Persona/Cargo se derivan de las filas ya cargadas (en cascada: persona y cargo dependen del área).
   const areas = [...new Set((data?.rows || []).map((row) => row.area).filter(Boolean))].sort()
@@ -217,8 +228,22 @@ export function ResultsPage() {
           </label>
           {/* basis-full fuerza salto de línea: la evaluación (y su fecha de cierre) va debajo de Área/Persona/Cargo. */}
           <div className="flex basis-full flex-wrap items-end gap-3">
+            <label className={`${LABEL} w-full sm:w-auto sm:min-w-56`}>
+              Tipo de programación
+              <AutocompleteSelect
+                value={kind}
+                onChange={(value) => {
+                  if (!value || value === kind) return
+                  // Al cambiar de tipo, el backend elige la evaluación por defecto de ese tipo.
+                  setKind(value); setEvaluation(''); setArea(''); setPerson(''); setPosition(''); setPage(1)
+                }}
+                placeholder="Seleccione el tipo de programación"
+                options={KIND_OPTIONS}
+              />
+              <span className="text-xs font-normal text-app-muted">Seleccione el tipo de programación de evaluación.</span>
+            </label>
             <EvaluationSelect
-              evaluations={evaluations}
+              evaluations={kindEvaluations}
               value={evaluation}
               onChange={(value) => { setEvaluation(value); setArea(''); setPerson(''); setPosition(''); setPage(1) }}
             />
