@@ -15,7 +15,7 @@ from django.shortcuts import render
 from django.utils.cache import patch_vary_headers
 
 # El login del admin ya trae su propio bloqueo; los estáticos y el media no son endpoints.
-EXCLUDED_PREFIXES = ("/admin/", "/static/", "/media/", "/__debug__/")
+EXCLUDED_PREFIXES = ("/django-admin/", "/static/", "/media/", "/__debug__/")
 
 
 def is_document_navigation(request) -> bool:
@@ -28,13 +28,13 @@ def is_document_navigation(request) -> bool:
 
 
 def has_admin_session(request) -> bool:
-    """Sesión iniciada en el panel /admin/ (cuenta activa con acceso al admin de Django)."""
+    """Sesión iniciada en el panel /django-admin/ (cuenta activa con acceso al admin de Django)."""
     user = getattr(request, "user", None)
     return bool(user and user.is_authenticated and user.is_active and user.is_staff)
 
 
 class PrivateWindowGateMiddleware:
-    """Navegaciones directas a los endpoints: solo desde una sesión del panel /admin/ (capa 17).
+    """Navegaciones directas a los endpoints: solo desde una sesión del panel /django-admin/ (capa 17).
 
     Sin sesión de administración responde 403 "Acceso no autorizado" y lo deja en la auditoría. Con ella, la
     página intermedia verifica la ventana (privada o normal) y luego muestra el contenido.

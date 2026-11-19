@@ -58,13 +58,14 @@ describe('LoginPage', () => {
     expect(await screen.findByText('EVALUATIONS')).toBeInTheDocument()
   })
 
-  it('usuario no encontrado', async () => {
+  it('usuario inexistente: mismo mensaje que clave incorrecta (no revela qué cuentas existen)', async () => {
     const { username, password } = randomCredentials()
-    mockLogin.mockRejectedValue({ status: 401, data: { code: 'user_not_found' } })
+    mockLogin.mockRejectedValue({ status: 401, data: { detail: 'Acceso no autorizado.', code: 'unauthorized_access' } })
     renderPage()
     await fill(username, password)
     fireEvent.click(screen.getByRole('button', { name: 'Iniciar sesión' }))
-    expect(await screen.findByRole('alert')).toHaveTextContent('Usuario no encontrado.')
+    expect(await screen.findByRole('alert')).toHaveTextContent('Acceso no autorizado.')
+    expect(screen.queryByText(/no encontrado/i)).not.toBeInTheDocument()
   })
 
   it('clave incorrecta muestra acceso no autorizado', async () => {

@@ -4,6 +4,7 @@ import { BrowserRouter, Navigate, Route, Routes } from 'react-router-dom'
 import { Layout } from './components/Layout'
 import { AuthProvider, useAuth } from './context/AuthContext'
 import { LoginPage } from './pages/LoginPage'
+import { APP_BASENAME, isInsideApp } from './lib/appBase'
 
 // Cargar solo el login en la primera visita. Las páginas protegidas y sus dependencias
 // pesadas (gráficas, Excel) se descargan cuando el usuario entra a ellas.
@@ -70,11 +71,21 @@ function HomeRedirect() {
   return home ? <Navigate to={home} replace /> : <NoAccess />
 }
 
+// Fuera de /admin/ (ver lib/appBase.js): "Acceso no autorizado.".
+function Unauthorized() {
+  return (
+    <main className="flex min-h-dvh items-center justify-center bg-app p-6">
+      <p role="alert" className="text-lg font-semibold text-app">Acceso no autorizado.</p>
+    </main>
+  )
+}
+
 // /login va fuera de <Layout>; las demás rutas autenticadas usan Layout y exigen sesión.
 // y define el menú por rol. Ocultar un enlace NO protege la ruta: los permisos reales los aplica el backend.
 function App() {
+  if (!isInsideApp(window.location.pathname)) return <Unauthorized />
   return (
-    <BrowserRouter>
+    <BrowserRouter basename={APP_BASENAME}>
       <AuthProvider>
         {/* AuthProvider dentro del Router para poder usar navegación; consulta /auth/me/ al iniciar */}
         <Suspense fallback={<main className="p-6 text-sm text-app-muted" role="status">Cargando…</main>}>

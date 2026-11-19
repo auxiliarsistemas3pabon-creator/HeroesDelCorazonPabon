@@ -68,6 +68,8 @@ INSTALLED_APPS = ["daphne", "channels"] + DJANGO_APPS + THIRD_PARTY_APPS + LOCAL
 MIDDLEWARE = [
     'corsheaders.middleware.CorsMiddleware',
     'django.middleware.security.SecurityMiddleware',
+    # Errores de /api/ (cualquier endpoint y método): cuerpo único "Acceso no autorizado.", sin trazas ni cabecera Allow.
+    'common.exceptions.GenericApiErrorMiddleware',
     'common.security.NoStoreApiMiddleware',
     'common.security.MaliciousInputMiddleware',
     'whitenoise.middleware.WhiteNoiseMiddleware',

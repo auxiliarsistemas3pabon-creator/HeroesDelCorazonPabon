@@ -19,8 +19,9 @@ from rest_framework_simplejwt.exceptions import TokenError
 from rest_framework_simplejwt.tokens import RefreshToken
 
 from audit.mixins import AuditLogMixin
+from common.exceptions import UNAUTHORIZED_BODY
 from common.permissions import IsBossOrSuperAdmin, IsSuperAdmin
-from common.security import UNAUTHORIZED_MESSAGE, log_unauthorized, looks_malicious
+from common.security import log_unauthorized, looks_malicious
 from common.uploads import UploadRejected, validate_upload
 
 from .areas import is_removed_area
@@ -62,6 +63,11 @@ def _set_auth_cookies(response, refresh: RefreshToken):
     )
 
 
+def _unauthorized(code):
+    """Respuesta única de seguridad (common/exceptions.py): el motivo real solo queda en el log y la auditoría."""
+    return Response(dict(UNAUTHORIZED_BODY), status=code)
+
+
 def _clear_auth_cookies(response):
     """Borra las cookies de sesion; el path debe coincidir con el usado al crearlas o el navegador no las elimina."""
     response.delete_cookie(settings.AUTH_COOKIE_ACCESS_NAME)
@@ -83,10 +89,7 @@ class LoginView(AuditLogMixin, APIView):
         serializer = LoginSerializer(data=request.data)
         if not serializer.is_valid():
             log_unauthorized(request, "invalid_login_payload")
-            return Response(
-                {"detail": UNAUTHORIZED_MESSAGE, "code": "unauthorized_access"},
-                status=status.HTTP_400_BAD_REQUEST,
-            )
+            return _unauthorized(status.HTTP_400_BAD_REQUEST)
         credentials = serializer.validated_data
         username = credentials["username"]
         password = credentials["password"]
@@ -95,17 +98,10 @@ class LoginView(AuditLogMixin, APIView):
         # profundidad: el bloqueo principal ocurre en el frontend.
         if request.data.get("private_mode") is True:
             log_unauthorized(request, "private_mode")
-            return Response(
-                {"detail": _("Private or incognito windows are not allowed. Use a regular browser window."),
-                 "code": "private_mode"},
-                status=status.HTTP_403_FORBIDDEN,
-            )
+            return _unauthorized(status.HTTP_403_FORBIDDEN)
         if looks_malicious(username):
             log_unauthorized(request, "malicious_username")
-            return Response(
-                {"detail": UNAUTHORIZED_MESSAGE, "code": "unauthorized_access"},
-                status=status.HTTP_403_FORBIDDEN,
-            )
+            return _unauthorized(status.HTTP_403_FORBIDDEN)
 
         # Axes locks a username/IP pair after repeated failures. Check a valid
         # password against Django's normal backend first so a stale lockout
@@ -124,21 +120,11 @@ class LoginView(AuditLogMixin, APIView):
                 user = authenticate(request=request, username=username, password=password)
         except PermissionDenied:  # django-axes: account temporarily locked
             log_unauthorized(request, "locked_out")
-            return Response(
-                {"detail": _("Too many failed attempts. Try again later.")},
-                status=status.HTTP_403_FORBIDDEN,
-            )
+            return _unauthorized(status.HTTP_403_FORBIDDEN)
         if user is None or not user.is_active:
             log_unauthorized(request, "wrong_password" if registered else "unknown_user")
-            if not registered:
-                return Response(
-                    {"detail": _("User not found."), "code": "user_not_found"},
-                    status=status.HTTP_401_UNAUTHORIZED,
-                )
-            return Response(
-                {"detail": UNAUTHORIZED_MESSAGE, "code": "unauthorized_access"},
-                status=status.HTTP_401_UNAUTHORIZED,
-            )
+            # Misma respuesta exista o no la cuenta: no se revela qué documentos están registrados.
+            return _unauthorized(status.HTTP_401_UNAUTHORIZED)
 
         # Usuario registrado con clave correcta: se registra/reutiliza el dispositivo
         # y la sesion queda ligada a el.

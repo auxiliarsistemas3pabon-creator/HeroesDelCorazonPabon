@@ -1,4 +1,4 @@
-// Bloqueo de ventanas privadas/incógnito en las páginas del backend: login del admin (/admin/) y
+// Bloqueo de ventanas privadas/incógnito en las páginas del backend: login del admin (/django-admin/) y
 // apertura directa de los endpoints de la API en el navegador (api-gate.js).
 // Misma lógica que frontend/src/lib/privateMode.js: los campos se habilitan solo cuando termina la
 // verificación y quedan bloqueados únicamente si hay evidencia suficiente de navegación privada.

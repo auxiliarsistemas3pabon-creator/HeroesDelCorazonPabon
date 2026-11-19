@@ -88,7 +88,8 @@ describe('App.jsx - Rutas, autenticación y permisos', () => {
 
   // Función para navegar a una ruta
   const renderApp = (path = '/') => {
-    window.history.pushState({}, '', path)
+    // La app vive bajo /admin: los tests escriben la ruta interna y aquí se agrega el prefijo.
+    window.history.pushState({}, '', `/admin${path === '/' ? '' : path}`)
     return render(<App />)
   }
 
@@ -248,7 +249,7 @@ describe('App.jsx - Rutas, autenticación y permisos', () => {
 
     expect(await screen.findByText('EvaluationPage')).toBeInTheDocument()
     expect(screen.queryByText(page)).not.toBeInTheDocument()
-    expect(window.location.pathname).toBe('/evaluations')
+    expect(window.location.pathname).toBe('/admin/evaluations')
   })
 
   it('debe sacar al superadmin de /evaluations y llevarlo al Dashboard (no participa en evaluaciones)', async () => {
@@ -257,7 +258,7 @@ describe('App.jsx - Rutas, autenticación y permisos', () => {
 
     expect(await screen.findByText('DashboardPage')).toBeInTheDocument()
     expect(screen.queryByText('EvaluationPage')).not.toBeInTheDocument()
-    expect(window.location.pathname).toBe('/dashboard')
+    expect(window.location.pathname).toBe('/admin/dashboard')
   })
 
   it.each(['/evaluations', '/self-evaluation'])('el coordinador (boss) también evalúa: puede abrir %s', async (path) => {
@@ -265,14 +266,14 @@ describe('App.jsx - Rutas, autenticación y permisos', () => {
     renderApp(path)
 
     expect(await screen.findByText('EvaluationPage')).toBeInTheDocument()
-    expect(window.location.pathname).toBe(path)
+    expect(window.location.pathname).toBe(`/admin${path}`)
   })
 
   it('debe sacar /index.html escrito a mano al inicio del rol', async () => {
     renderApp('/index.html')
 
     expect(await screen.findByText('EvaluationPage')).toBeInTheDocument()
-    expect(window.location.pathname).toBe('/evaluations')
+    expect(window.location.pathname).toBe('/admin/evaluations')
   })
 
   it('no debe entrar en bucle con un rol sin páginas propias', async () => {
@@ -307,4 +308,14 @@ describe('App.jsx - Rutas, autenticación y permisos', () => {
     expect(await screen.findByText('DashboardPage')).toBeInTheDocument()
   })
 
+})
+
+describe('App fuera de /admin/', () => {
+  it.each(['/', '/login', '/dashboard', '/program', '/users'])('%s responde Acceso no autorizado (la app vive en /admin/)', (path) => {
+    window.history.pushState({}, '', path)
+    render(<App />)
+    expect(screen.getByRole('alert')).toHaveTextContent('Acceso no autorizado.')
+    expect(screen.queryByText('LoginPage')).not.toBeInTheDocument()
+    cleanup()
+  })
 })

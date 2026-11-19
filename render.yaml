@@ -5,7 +5,7 @@ services:
     plan: free
     dockerContext: ./frontend
     dockerfilePath: ./frontend/Dockerfile
-    healthCheckPath: /
+    healthCheckPath: /healthz
     envVars:
       - key: API_UPSTREAM
         value: https://heroesdelcorazon-pabon.onrender.com
@@ -16,7 +16,7 @@ services:
     plan: free
     dockerContext: ./backend
     dockerfilePath: ./backend/docker/Dockerfile
-    healthCheckPath: /
+    healthCheckPath: /healthz
     envVars:
       - key: DJANGO_SETTINGS_MODULE
         value: config.settings.prod

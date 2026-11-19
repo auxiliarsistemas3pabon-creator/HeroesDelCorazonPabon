@@ -40,7 +40,7 @@ class NoStoreLayerTests(APITestCase):
         self.assertEqual(response["Pragma"], "no-cache")
 
     def test_non_api_responses_are_untouched(self):
-        self.assertNotIn("no-store", self.client.get("/").get("Cache-Control", ""))
+        self.assertNotIn("no-store", self.client.get("/healthz").get("Cache-Control", ""))
 
 
 class PersistentAuditLayerTests(APITestCase):

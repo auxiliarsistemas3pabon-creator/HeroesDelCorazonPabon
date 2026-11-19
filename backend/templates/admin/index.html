@@ -1,6 +1,6 @@
 {% extends "admin/index.html" %}
 {% comment %}
-  Inicio del panel /admin/: enlaces a los endpoints de la API. Abrir un endpoint directamente en el navegador solo
+  Inicio del panel /django-admin/: enlaces a los endpoints de la API. Abrir un endpoint directamente en el navegador solo
   se permite con una sesión de este panel (common/navigation.py); fuera de él responde "Acceso no autorizado".
   Sin estilos en línea: la CSP del backend no los permite.
 {% endcomment %}
@@ -8,7 +8,7 @@
 <div class="module" id="api-endpoints">
   <table>
     <caption>Endpoints de la API (solo desde este panel)</caption>
-    <tr><th scope="row"><a href="/">Estado del servicio</a></th></tr>
+    <tr><th scope="row"><a href="/healthz">Estado del servicio</a></th></tr>
     <tr><th scope="row"><a href="/api/v1/">Índice de la API</a></th></tr>
     <tr><th scope="row"><a href="/api/v1/auth/me/">Sesión actual (auth/me)</a></th></tr>
     <tr><th scope="row"><a href="/api/v1/users/areas/">Áreas</a></th></tr>

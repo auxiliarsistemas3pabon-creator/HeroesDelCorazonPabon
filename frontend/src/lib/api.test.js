@@ -12,13 +12,12 @@ function jsonResponse(status, body) {
 describe('errorMessage', () => {
   beforeEach(() => vi.spyOn(console, 'warn').mockImplementation(() => {}))
 
-  it('usuario no encontrado y acceso no autorizado avisan en consola', () => {
-    expect(errorMessage({ status: 401, data: { code: 'user_not_found' } })).toBe('Usuario no encontrado.')
-    expect(errorMessage({ status: 401, data: { code: 'unauthorized_access' } })).toBe('Acceso no autorizado.')
+  it('la respuesta única de seguridad se muestra igual en cualquier código y avisa en consola', () => {
+    const body = { detail: 'Acceso no autorizado.', code: 'unauthorized_access' }
+    for (const status of [400, 401, 403, 404, 405, 429]) {
+      expect(errorMessage({ status, data: body })).toBe('Acceso no autorizado.')
+    }
     expect(console.warn).toHaveBeenCalledWith('Permiso no autorizado')
-  })
-  it('modo privado', () => {
-    expect(errorMessage({ status: 403, data: { code: 'private_mode' } })).toMatch(/incógnito/)
   })
   it('sesión no establecida', () => {
     expect(errorMessage({ code: 'SESSION_NOT_ESTABLISHED' })).toMatch(/cookie/)
@@ -98,12 +97,30 @@ describe('api', () => {
     Object.defineProperty(document, 'cookie', { value: '', configurable: true })
     const fetchMock = vi.fn()
       .mockResolvedValueOnce(jsonResponse(200, { csrfToken: 't1' }))
-      .mockResolvedValueOnce(jsonResponse(403, { detail: 'CSRF Failed: x' }))
+      // El backend ya no dice "CSRF Failed": todo 403 trae el mismo cuerpo genérico.
+      .mockResolvedValueOnce(jsonResponse(403, { detail: 'Acceso no autorizado.', code: 'unauthorized_access' }))
       .mockResolvedValueOnce(jsonResponse(200, { csrfToken: 't2' }))
       .mockResolvedValueOnce(jsonResponse(200, { saved: true }))
     vi.stubGlobal('fetch', fetchMock)
     expect(await api('/x/', { method: 'POST', body: {} })).toEqual({ saved: true })
     expect(fetchMock.mock.calls[3][1].headers['X-CSRFToken']).toBe('t2')
+  })
+  it('un 403 repetido no reintenta más de una vez', async () => {
+    const forbidden = () => jsonResponse(403, { detail: 'Acceso no autorizado.', code: 'unauthorized_access' })
+    const fetchMock = vi.fn()
+      .mockResolvedValueOnce(forbidden())
+      .mockResolvedValueOnce(jsonResponse(200, { csrfToken: 't2' }))
+      .mockResolvedValueOnce(forbidden())
+    vi.stubGlobal('fetch', fetchMock)
+    await expect(api('/x/', { method: 'DELETE' })).rejects.toMatchObject({ status: 403 })
+    expect(fetchMock).toHaveBeenCalledTimes(3)
+  })
+  it('no reintenta el login ni las lecturas con 403', async () => {
+    const fetchMock = vi.fn().mockResolvedValue(jsonResponse(403, { detail: 'Acceso no autorizado.', code: 'unauthorized_access' }))
+    vi.stubGlobal('fetch', fetchMock)
+    await expect(api('/auth/login/', { method: 'POST', body: {} })).rejects.toMatchObject({ status: 403 })
+    await expect(api('/users/admin/')).rejects.toMatchObject({ status: 403 })
+    expect(fetchMock).toHaveBeenCalledTimes(2)
   })
   it('falla si no se puede obtener el CSRF', async () => {
     Object.defineProperty(document, 'cookie', { value: '', configurable: true })

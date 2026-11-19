@@ -1,7 +1,7 @@
 name: heroes_corazon
 
 # Development (run from this folder): docker compose up --build
-#   API     http://localhost:${API_PORT:-8001}          (admin at /admin/)
+#   API     http://localhost:${API_PORT:-8001}          (admin at /django-admin/)
 #   Mailpit http://localhost:${MAILPIT_UI_PORT:-8026}   (password recovery emails)
 # If those ports are busy, set API_PORT / DB_PORT / MAILPIT_UI_PORT.
 # The frontend runs separately (npm run dev in frontend/) and proxies /api to :8001.

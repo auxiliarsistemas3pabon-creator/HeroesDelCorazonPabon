@@ -1,3 +1,11 @@
+# Navegador o no: los navegadores modernos (Chrome, Edge, Firefox, Safari 16.4+) envían Sec-Fetch-Mode en toda
+# petición HTTPS. Postman, curl y scripts no la envían. Es disuasión (se puede falsificar a mano), igual que en el
+# backend; la protección de los datos es la autenticación de la API.
+map $http_sec_fetch_mode $is_browser {
+    ""      0;
+    default 1;
+}
+
 server {
     listen ${PORT};
     server_name _;
@@ -15,6 +23,44 @@ server {
     gzip_proxied any;
     gzip_types text/plain text/css text/javascript application/javascript application/json image/svg+xml;
 
+    # Respuesta única "Acceso no autorizado." (la misma que da la API). HTML para el navegador, JSON para el resto.
+    location @unauthorized {
+        if ($is_browser) {
+            rewrite ^ /__unauthorized last;
+        }
+        # types vacío: el tipo no se deduce de la extensión (/assets/x.js) y siempre sale JSON.
+        types { }
+        default_type application/json;
+        add_header Cache-Control "no-store" always;
+        add_header X-Content-Type-Options "nosniff" always;
+        return 403 '{"detail": "Acceso no autorizado.", "code": "unauthorized_access"}';
+    }
+    location = /__unauthorized {
+        internal;
+        types { }
+        default_type text/html;
+        add_header Cache-Control "no-store" always;
+        include /etc/nginx/snippets/security-headers.conf;
+        return 403 '<!doctype html><html lang="es"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><meta name="robots" content="noindex"><title>Acceso no autorizado</title></head><body><p role="alert">Acceso no autorizado.</p></body></html>';
+    }
+    location @method_not_allowed {
+        types { }
+        default_type application/json;
+        add_header Cache-Control "no-store" always;
+        add_header X-Content-Type-Options "nosniff" always;
+        return 405 '{"detail": "Acceso no autorizado.", "code": "unauthorized_access"}';
+    }
+    error_page 403 = @unauthorized;
+    error_page 405 = @method_not_allowed;
+
+    # Chequeo de salud de Render: única ruta que responde a clientes que no son navegador. Sin datos.
+    location = /healthz {
+        access_log off;
+        default_type application/json;
+        return 200 '{"status": "ok"}';
+    }
+
+    # API y WebSocket: el backend aplica sus propias reglas (respuesta única, métodos, sesión).
     location /api/ {
         proxy_pass ${API_UPSTREAM};
         proxy_http_version 1.1;
@@ -30,6 +76,8 @@ server {
     # Scripts/estilos de la página de verificación de ventana privada que el backend sirve al abrir
     # /api/... directamente en el navegador: deben salir del mismo origen que la página (CSP 'self').
     location /static/security/ {
+        if ($request_method !~ ^(GET|HEAD)$) { return 405; }
+        if ($is_browser = 0) { return 403; }
         proxy_pass ${API_UPSTREAM};
         proxy_http_version 1.1;
         proxy_set_header Host $proxy_host;
@@ -51,26 +99,45 @@ server {
     }
 
     location ~ /\. {
-        deny all;
-        return 404;
+        return 403;
     }
 
-    location = /index.html {
-        add_header Cache-Control "no-store, no-cache, must-revalidate, proxy-revalidate, max-age=0" always;
-        include /etc/nginx/snippets/security-headers.conf;
-        expires -1;
-    }
-
+    # Archivos del build (JS, CSS) e imágenes de marca: solo GET/HEAD y solo desde un navegador.
     location /assets/ {
-        try_files $uri =404;
+        if ($request_method !~ ^(GET|HEAD)$) { return 405; }
+        if ($is_browser = 0) { return 403; }
+        try_files $uri =403;
         expires 1y;
         add_header Cache-Control "public, immutable" always;
         include /etc/nginx/snippets/security-headers.conf;
     }
 
-    location / {
-        try_files $uri $uri/ /index.html;
+    location /branding/ {
+        if ($request_method !~ ^(GET|HEAD)$) { return 405; }
+        if ($is_browser = 0) { return 403; }
+        try_files $uri =403;
+        expires 7d;
+        include /etc/nginx/snippets/security-headers.conf;
+    }
+
+    # La aplicación vive bajo /admin/ (/admin/login, /admin/dashboard, /admin/program…).
+    location = /admin {
+        if ($is_browser = 0) { return 403; }
+        return 301 /admin/login;
+    }
+
+    location /admin/ {
+        if ($request_method !~ ^(GET|HEAD)$) { return 405; }
+        if ($is_browser = 0) { return 403; }
+        try_files /index.html =403;
         add_header Cache-Control "no-store, no-cache, must-revalidate, proxy-revalidate, max-age=0" always;
         include /etc/nginx/snippets/security-headers.conf;
+        expires -1;
+    }
+
+    # Todo lo demás (/, /login, /program, /index.html, rutas inventadas…): "Acceso no autorizado."
+    location / {
+        if ($request_method !~ ^(GET|HEAD)$) { return 405; }
+        return 403;
     }
 }

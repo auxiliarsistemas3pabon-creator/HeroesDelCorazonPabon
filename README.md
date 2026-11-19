@@ -15,7 +15,7 @@ Este documento describe la solución para desarrollo y mantenimiento. Los requis
 | PostgreSQL | PostgreSQL 16 | Persistencia local y de producción. En Docker Compose usa el volumen `heroes_api_postgres_data`. |
 | SQL Server | SQL Server local | Destino previsto para una migración posterior. |
 
-En desarrollo, Vite sirve el frontend en `http://localhost:5173` y reenvía `/api` al backend. La API local se publica en `http://localhost:8001` (o el puerto indicado por `API_PORT`).
+En desarrollo, Vite sirve el frontend en `http://localhost:5173/admin/` y reenvía `/api` al backend. La API local se publica en `http://localhost:8001` (o el puerto indicado por `API_PORT`).
 
 ## Requisitos previos
 
@@ -45,7 +45,7 @@ El backend corre dentro de Docker en el flujo recomendado; no es necesario insta
    npm run dev
    ```
 
-4. Abrir `http://localhost:5173`. La administración Django está en `http://localhost:8001/admin/`.
+4. Abrir `http://localhost:5173/admin/login`: la app vive bajo `/admin/` y cualquier otra ruta responde "Acceso no autorizado.". La administración Django está en `http://localhost:8001/django-admin/`.
 
 Si los puertos están ocupados, establecer `API_PORT` y/o `MAILPIT_UI_PORT` en `backend/.env`. En desarrollo, `VITE_API_URL=http://localhost:8001` apunta al puerto local que Docker publica para Django. En producción, el cliente usa `/api/v1` en el mismo origen y Render reenvía esa ruta al backend.
 
@@ -420,9 +420,9 @@ Una clínica requiere como mínimo 7 capas de seguridad; este proyecto implement
 | 12 | HTTPS obligatorio + HSTS | `prod.py` |
 | 13 | CORS / orígenes de confianza exactos | `CORS_ALLOWED_ORIGINS`, `CSRF_TRUSTED_ORIGINS` |
 | 14 | Registro estructurado de auditoría y seguridad | `audit/logging.py` (+ Sentry si hay `SENTRY_DSN`) |
-| 15 | Minimización de información expuesta | nginx `server_tokens off`, `DEBUG=False`, mensajes genéricos |
+| 15 | Minimización de información: respuesta única `{"detail": "Acceso no autorizado.", "code": "unauthorized_access"}` en cualquier endpoint y método para 401/403/404/405/429 (y 400 sin sesión), sin cabecera `Allow`; el login no revela si la cuenta existe | `common/exceptions.py`, nginx `server_tokens off`, `DEBUG=False` |
 | 16 | Gestión de secretos | variables de entorno; `prod.py` exige `DJANGO_SECRET_KEY` ≥ 50 |
-| 17 | Bloqueo de ventanas privadas y acceso directo a los endpoints solo desde una sesión de `/admin/` (si no, 403 "Acceso no autorizado.") | `lib/privateMode.js`, `common/navigation.py`, `templates/admin/index.html` |
+| 17 | Bloqueo de ventanas privadas; abrir endpoints del backend en el navegador solo con sesión de `/django-admin/`; la app solo bajo `/admin/` y solo desde un navegador (nginx), con GET/HEAD; todo lo demás, "Acceso no autorizado." | `lib/privateMode.js`, `common/navigation.py`, `frontend/nginx/default.conf.template`, `lib/appBase.js` |
 | 18 | Contraseña inicial con cambio obligatorio | `enforce_password_change`, `PasswordChangeView` |
 | 19 | Ciclo de vida de cuentas (inhabilitar, ≥1 superadmin) | `AdminUsersView` |
 | 20 | Cierre de sesión por inactividad | `frontend/src/lib/useIdleLogout.js` |
@@ -434,7 +434,21 @@ Una clínica requiere como mínimo 7 capas de seguridad; este proyecto implement
 
 Las capas 20 a 25 se agregaron el 2026-11-19. Al activar la capa 25 se actualizaron `djangorestframework` 3.18.0 → 3.18.2 y `daphne` 4.2.1 → 4.2.2 por vulnerabilidades conocidas.
 
-**Pendientes que no dependen solo del código** (detalle en la guía de pruebas): copias de seguridad de la base de Render (plan gratuito, vence el 2026-12-10), el mensaje "Usuario no encontrado" del login (revela qué documentos existen), la IP tomada del primer valor de `X-Forwarded-For`, el aviso de `xlsx` en npm, el contenedor del backend como root y la ruta por defecto de `/admin/`.
+**Pendientes que no dependen solo del código** (detalle en la guía de pruebas): copias de seguridad de la base de Render (plan gratuito, vence el 2026-12-10), la IP tomada del primer valor de `X-Forwarded-For`, el aviso de `xlsx` en npm y el contenedor del backend como root.
+
+### Rutas públicas y respuesta única
+
+| Dónde | Qué responde |
+| --- | --- |
+| Frontend `https://…-1.onrender.com/admin/...` | La app (login en `/admin/login`). Solo navegadores (cabecera `Sec-Fetch-Mode`) y solo GET/HEAD. |
+| Frontend: cualquier otra ruta (`/`, `/login`, `/index.html`…) | 403 "Acceso no autorizado." (HTML en el navegador, JSON en Postman/curl). |
+| Frontend: POST, PUT, PATCH, DELETE, OPTIONS fuera de `/api/` | 405 con el mismo cuerpo JSON, sin cabecera `Allow`. |
+| Backend `/django-admin/` | Panel de Django (antes `/admin/`). |
+| Backend `/api/...` | Reglas de la API; errores con el cuerpo único (`common/exceptions.py`). OPTIONS directo: 405 genérico; el preflight CORS legítimo sigue funcionando. |
+| Backend: cualquier otra ruta (`/`, `/admin/`…) | El mismo cuerpo único. |
+| `/healthz` (frontend y backend) | `{"status": "ok"}`: chequeo de salud de Render (`render.yaml`). Sin datos. |
+
+**Inspeccionar (DevTools):** ningún sitio web puede impedirlo de verdad. En producción, `lib/devtoolsDeterrent.js` bloquea F12, Ctrl+Shift+I/J/C/K, Ctrl+U y el clic derecho fuera de los campos de texto. Es **disuasión**, no una capa de seguridad: la protección real es que el servidor no envía datos sin sesión válida. La detección "navegador o no" por `Sec-Fetch-Mode` también es disuasión (la cabecera se puede escribir a mano en Postman).
 
 ## Pruebas y calidad
 

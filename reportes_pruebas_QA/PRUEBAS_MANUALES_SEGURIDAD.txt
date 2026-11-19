@@ -19,7 +19,7 @@ máximo de este proyecto es 25.
 ENTORNOS PARA PROBAR
 --------------------
   Local (Docker):    API      http://localhost:8001
-                     Frontend http://localhost:5173   (.\heroes.ps1 front)
+                     Frontend http://localhost:5173/admin/login   (.\heroes.ps1 front)
   Producción:        https://heroesdelcorazon-pabon-1.onrender.com  (app)
                      https://heroesdelcorazon-pabon.onrender.com    (API)
 
@@ -97,7 +97,7 @@ CAPA 7 · Sesión ligada al dispositivo
   Dónde       : users/devices.py, common/authentication.py enforce_device
   Cómo probar : 1. En Chrome, con sesión iniciada, copie el valor de access_token
                    (F12 > Application > Cookies).
-                2. En otro navegador (Edge) abra http://localhost:5173, F12 >
+                2. En otro navegador (Edge) abra http://localhost:5173/admin/login, F12 >
                    Application > Cookies, cree la cookie access_token con ese
                    valor (sin la cookie did_...).
                 3. En la consola de Edge: fetch('/api/v1/auth/me/').then(r => r.status)
@@ -126,40 +126,57 @@ CAPA 9 · Control de acceso por rol (RBAC) en el servidor
   Cómo probar : 1. Inicie sesión como Colaborador.
                 2. Consola: fetch('/api/v1/users/admin/').then(r => r.status)
                 3. Consola: fetch('/api/v1/questions/results-summary/').then(r => r.status)
-                4. Escriba en la barra http://localhost:5173/users
+                4. Escriba en la barra http://localhost:5173/admin/users
   Esperado    : 2 y 3 responden 403; en 4 la app lo devuelve a su inicio.
                 El superadmin NO puede enviar evaluaciones (403); el
                 coordinador sí, con las mismas reglas que un colaborador.
 
-CAPA 17 · Ventanas privadas y acceso directo a los endpoints solo desde /admin/
+CAPA 17 · Ventanas privadas, rutas protegidas y "Acceso no autorizado"
   Qué protege : sesiones en ventanas que no dejan rastro en equipos compartidos, y
-                que cualquiera abra las rutas del backend escribiéndolas en el navegador.
+                que cualquiera abra rutas escribiéndolas en el navegador o en Postman.
   Dónde       : frontend/src/lib/privateMode.js; LoginView (private_mode);
-                common/navigation.py (PrivateWindowGateMiddleware);
-                templates/security/unauthorized.html; templates/admin/index.html
-  Regla       : abrir directamente en el navegador /, /api/... solo se permite con
-                una sesión iniciada en el panel /admin/ (cuenta activa y "staff").
-                Sin ella: 403 "Acceso no autorizado." y un evento
-                security.direct_navigation en la auditoría. Una sesión de la app NO
-                cuenta: hay que entrar por /admin/.
-  Cómo probar : 1. Sin sesión en /admin/, escriba en la barra:
-                     https://heroesdelcorazon-pabon.onrender.com/api/v1/auth/me
-                     http://localhost:8001/
-                2. Entre a /admin/ con una cuenta staff (createsuperuser). En el
-                   inicio aparece "Endpoints de la API"; ábralos desde ahí (o vuelva
-                   a escribir las URL del paso 1 en esa misma ventana).
-                3. Salga de /admin/ (Cerrar sesión) y repita el paso 1.
-                4. Abra la app en una ventana de incógnito (Ctrl+Mayús+N).
-                5. Con sesión en /admin/, abra un endpoint en una ventana de incógnito.
-  Esperado    : 1 y 3: "HTTP 403 — Acceso no autorizado." (ni JSON ni "HTTP 200").
-                2: se verifica la ventana y se muestra el contenido.
-                4: el formulario de login queda deshabilitado (ventanas privadas).
-                5: no se muestra el contenido.
-  Alcance     : esta capa es del NAVEGADOR. La app (fetch) y las herramientas como
-                Postman o curl no "navegan": no pasan por aquí. A esas peticiones las
-                controla la autenticación de la API (capas 5 a 9): sin sesión, los
-                datos responden 401/403. "/" devuelve solo {"status": "ok"} (chequeo
-                de salud, sin datos) y /api/v1/ un índice de rutas públicas.
+                frontend/nginx/default.conf.template (reglas del frontend);
+                frontend/src/lib/appBase.js (la app vive bajo /admin/);
+                backend common/navigation.py y common/exceptions.py
+  Reglas      : FRONTEND (https://heroesdelcorazon-pabon-1.onrender.com)
+                - La app vive SOLO bajo /admin/: /admin/login, /admin/dashboard,
+                  /admin/program, /admin/users… /admin redirige a /admin/login.
+                - Cualquier otra ruta (/, /login, /program, /index.html…):
+                  403 "Acceso no autorizado.".
+                - Solo navegadores: sin la cabecera Sec-Fetch-Mode (Postman, curl)
+                  también /admin/…, /assets/… y /branding/… dan 403.
+                - Solo GET/HEAD: POST, PUT, PATCH, DELETE y OPTIONS dan 405 con el
+                  mismo cuerpo y sin cabecera Allow.
+                BACKEND (https://heroesdelcorazon-pabon.onrender.com)
+                - El panel de Django se movió de /admin/ a /django-admin/.
+                - Abrir /api/... en el navegador solo con sesión de /django-admin/
+                  (cuenta activa y "staff"); si no, 403 "Acceso no autorizado." y un
+                  evento security.direct_navigation en la auditoría.
+                - /, /admin/ y cualquier ruta desconocida: el cuerpo único.
+                - OPTIONS directo: 405 genérico (ya no describe campos ni métodos).
+                - Chequeo de salud de Render: /healthz (frontend y backend).
+  Cómo probar : 1. Navegador: abra .../-1.onrender.com/login  y  /  → Acceso no autorizado.
+                   Abra .../-1.onrender.com/admin/login → login de la app.
+                2. Postman, GET https://heroesdelcorazon-pabon-1.onrender.com/login
+                   y /admin/login → 403 JSON "Acceso no autorizado.".
+                3. Postman: POST, PUT, PATCH, DELETE y OPTIONS a /admin/login → 405.
+                4. Postman: OPTIONS https://heroesdelcorazon-pabon.onrender.com/api/v1/auth/login/
+                   → 405 genérico. GET .../admin/ y .../ en el backend → genérico.
+                5. Navegador, sin sesión de Django: .../api/v1/auth/me → Acceso no
+                   autorizado. Entre a .../django-admin/ (cuenta de createsuperuser);
+                   en el inicio, "Endpoints de la API" → se muestra el contenido.
+                6. Abra la app en una ventana de incógnito (Ctrl+Mayús+N).
+                7. GET /healthz en ambos dominios → {"status": "ok"}.
+  Esperado    : lo indicado en cada paso. 6: el login queda deshabilitado.
+  Límites     : "Solo navegadores" se decide por la cabecera Sec-Fetch-Mode, que
+                Postman puede enviar si se escribe a mano: es disuasión. Lo que
+                protege los datos es la autenticación de la API (capas 5 a 9).
+                Inspeccionar (F12): ningún sitio web puede impedirlo de verdad. En
+                producción se bloquean F12, Ctrl+Shift+I/J/C/K, Ctrl+U y el clic
+                derecho fuera de los campos (frontend/src/lib/devtoolsDeterrent.js),
+                pero se puede abrir desde el menú del navegador. Es disuasión.
+                Navegadores sin Sec-Fetch-Mode (Safari anterior a 16.4) no pueden
+                abrir la app.
 
 CAPA 18 · Contraseña inicial con cambio obligatorio
   Qué protege : la contraseña inicial Pabon2026* la conoce todo el mundo.
@@ -231,14 +248,34 @@ CAPA 13 · CORS y orígenes de confianza
   Esperado    : con el origen atacante NO aparece Access-Control-Allow-Origin;
                 con el origen de la app sí.
 
-CAPA 15 · Minimización de información expuesta
-  Qué protege : dar pistas a un atacante (versiones, trazas de error).
-  Dónde       : nginx server_tokens off / proxy_hide_header; DEBUG=False en prod;
-                mensajes genéricos "Acceso no autorizado."
-  Cómo probar : curl.exe -sI https://heroesdelcorazon-pabon-1.onrender.com/ | findstr /i "server x-powered"
-                curl.exe -s https://heroesdelcorazon-pabon.onrender.com/api/v1/no-existe/
-  Esperado    : sin versión de nginx ni X-Powered-By; el 404 no muestra la
-                página de depuración de Django.
+CAPA 15 · Minimización de información y respuesta única "Acceso no autorizado."
+  Qué protege : dar pistas a un atacante: versiones, trazas de error, qué métodos
+                acepta una ruta, si una ruta o recurso existe, si una cuenta existe
+                o está bloqueada.
+  Dónde       : backend/common/exceptions.py GenericApiErrorMiddleware;
+                users/views.py LoginView; nginx server_tokens off; DEBUG=False en prod.
+  Regla       : en /api/, cualquier endpoint de cualquier módulo y con cualquier
+                método (GET, POST, PUT, PATCH, DELETE) responde el MISMO cuerpo:
+                  {"detail": "Acceso no autorizado.", "code": "unauthorized_access"}
+                cuando: no hay sesión (401), falta permiso o CSRF (403), la ruta no
+                existe (404), el método no existe (405), se excede el límite (429) o
+                un dato es inválido sin sesión (400). No se envía la cabecera Allow
+                ni WWW-Authenticate. Errores 500: "Error interno del servidor." sin traza.
+                El código HTTP se conserva (la app necesita el 401 para renovar la
+                sesión). Con sesión, los 400 de formularios conservan su mensaje.
+                El motivo real queda solo en el log y en la auditoría (capa 23).
+  Cómo probar : En Postman (o curl.exe), SIN sesión, pruebe GET, POST, PUT, PATCH y
+                DELETE contra:
+                  http://localhost:8001/api/v1/auth/login/
+                  http://localhost:8001/api/v1/users/admin/
+                  http://localhost:8001/api/v1/questions/evaluations/1/
+                  http://localhost:8001/api/v1/no-existe/
+                Login con un documento que NO existe y con uno que SÍ existe pero con
+                clave incorrecta. Revise la pestaña Headers de Postman.
+                curl.exe -sI https://heroesdelcorazon-pabon-1.onrender.com/ | findstr /i "server x-powered"
+  Esperado    : siempre el mismo cuerpo (cambia solo el número: 400/401/403/404/405);
+                ambos logins responden idéntico; no hay cabecera Allow; sin versión
+                de nginx ni X-Powered-By; nunca la página de depuración de Django.
 
 
 ===============================================================================
@@ -316,7 +353,7 @@ CAPA 23 · Auditoría persistente, de solo inserción               [NUEVA]
                 3. Intente alterarlo:
                      e = AuditEvent.objects.first(); e.outcome = "x"; e.save()
                      AuditEvent.objects.all().delete()
-                4. Con una cuenta de Django staff: /admin/ > Auditoría >
+                4. Con una cuenta de Django staff: /django-admin/ > Auditoría >
                    Eventos de auditoría.
   Esperado    : 2. Aparecen login.post failure, security.wrong_password blocked,
                    admin-user-detail.patch success con usuario e IP.
@@ -370,9 +407,8 @@ CAPA 25 · Escaneo de vulnerabilidades en dependencias            [NUEVA]
   P1 · COPIAS DE SEGURIDAD — CRÍTICO. La base de Render es del plan gratuito:
        no tiene backups automáticos y VENCE EL 2026-12-10 (se pierden los datos).
        Pasarla a un plan pago (con backups diarios) o programar exportaciones.
-  P2 · Mensaje "Usuario no encontrado" en el login: revela qué documentos
-       existen (enumeración). Se dejó porque la app lo usa a propósito; para
-       cerrarlo, responder igual que con contraseña incorrecta.
+  P2 · RESUELTO (capa 15): el login ya no dice "Usuario no encontrado"; responde
+       igual exista o no la cuenta.
   P3 · La IP del cliente se toma del primer valor de X-Forwarded-For, que el
        propio cliente puede inventar. Afecta al bloqueo por IP (capa 3) y a la
        IP registrada (capa 23). Corregirlo requiere fijar la cabecera en el
@@ -381,7 +417,7 @@ CAPA 25 · Escaneo de vulnerabilidades en dependencias            [NUEVA]
        (https://cdn.sheetjs.com, versión 0.20.x), que corrige el aviso.
   P5 · El contenedor del backend corre como root. Recomendado: usuario sin
        privilegios en backend/docker/Dockerfile (probar el despliegue en Render).
-  P6 · /admin/ de Django está en la ruta por defecto. Puede moverse a una ruta
+  P6 · RESUELTO (capa 17): el panel de Django se movió a /django-admin/. Puede
        no predecible o restringirse por IP.
   P7 · Segundo factor (2FA) y "dispositivo fijo": se evaluaron y se decidió no
        usarlos en esta clínica (decisión del equipo).

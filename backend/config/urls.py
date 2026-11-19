@@ -26,21 +26,26 @@ def health_check(request):
 
 
 def api_root(request):
-    """Small index so opening the API version root does not return a 404."""
+    """Small index so opening the API version root does not return a 404. No anuncia la ruta del admin."""
     return JsonResponse({
         "version": "v1",
         "endpoints": {
             "csrf": "/api/v1/auth/csrf/",
             "login": "/api/v1/auth/login/",
-            "admin": "/admin/",
         },
     })
 
 
+# Panel de Django en /django-admin/ (la ruta /admin/ es de la app web). /admin/ en el backend ya no existe:
+# responde "Acceso no autorizado." como cualquier ruta desconocida.
+ADMIN_URL = "django-admin/"
+
 # Ambas apps comparten el prefijo api/v1/; sus rutas no deben chocar entre si.
+# "/" ya no responde: como cualquier ruta desconocida da "Acceso no autorizado.". El chequeo de salud de Render
+# usa /healthz (render.yaml), que no devuelve datos.
 urlpatterns = [
-    path('', health_check, name='health-check'),
-    path('admin/', admin.site.urls),
+    path('healthz', health_check, name='health-check'),
+    path(ADMIN_URL, admin.site.urls),
     path('api/', api_root, name='api-alias'),
     path('api/v1/', api_root, name='api-root'),
     path('api/v1/', include('users.urls')),

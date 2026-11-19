@@ -40,7 +40,7 @@ class InitialPasswordTests(APITestCase):
         self.assertEqual(client.get("/api/v1/auth/me/").status_code, 200)
         blocked = client.get("/api/v1/questions/evaluations/")
         self.assertEqual(blocked.status_code, 403)
-        self.assertEqual(blocked.data["detail"].code, "password_change_required")
+        self.assertEqual(blocked.data, {"detail": "Acceso no autorizado.", "code": "unauthorized_access"})
 
         changed = client.post(CHANGE, {"current_password": settings.DEFAULT_USER_PASSWORD, "new_password": NEW}, format="json")
         self.assertEqual(changed.status_code, 200)

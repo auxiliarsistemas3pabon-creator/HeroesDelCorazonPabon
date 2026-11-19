@@ -2,6 +2,7 @@ import { StrictMode } from 'react'
 import { createRoot } from 'react-dom/client'
 import './index.css'
 import App from './App.jsx'
+import { installDevtoolsDeterrent } from './lib/devtoolsDeterrent'
 
 // Render solo permite los orígenes del frontend principal. Las URLs efímeras
 // de preview de Vercel cambian en cada despliegue y no deben iniciar la app
@@ -17,6 +18,8 @@ if (isProjectPreview) {
     `${PRODUCTION_FRONTEND_URL}${window.location.pathname}${window.location.search}${window.location.hash}`,
   )
 } else {
+  // Disuasión contra "Inspeccionar" solo en producción (ver lib/devtoolsDeterrent.js: no es una protección real).
+  if (import.meta.env.PROD) installDevtoolsDeterrent()
   // StrictMode ejecuta los efectos dos veces en desarrollo (solo dev): los useEffect con fetch deben tolerar peticiones duplicadas.
   createRoot(document.getElementById('root')).render(
     <StrictMode>

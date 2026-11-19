@@ -33,14 +33,10 @@ export function errorMessage(error, fallback = 'Ocurrió un error') {
       ? 'El backend aceptó el inicio de sesión, pero no se conservó la cookie. Comprueba que Docker y el proxy local estén activos.'
       : 'El backend aceptó el inicio de sesión, pero no se conservó la cookie. Comprueba el proxy /api del frontend de Render.'
   }
-  // Respuestas de seguridad del login (códigos del backend): se avisa también en la consola del navegador.
-  const securityCode = error?.data?.code
-  if (securityCode === 'user_not_found' || securityCode === 'unauthorized_access') {
+  // Respuesta única de seguridad del backend (common/exceptions.py): no distingue el motivo a propósito.
+  if (error?.data?.code === 'unauthorized_access') {
     console.warn('Permiso no autorizado')
-    return securityCode === 'user_not_found' ? 'Usuario no encontrado.' : 'Acceso no autorizado.'
-  }
-  if (securityCode === 'private_mode') {
-    return 'No se permite el acceso desde una ventana privada o de incógnito. Usa una ventana normal del navegador.'
+    return 'Acceso no autorizado.'
   }
   // 502/503/504: el backend se está reiniciando o no responde; fetch sin status: no hay conexión.
   if (error?.status >= 502) return 'El servidor no está disponible en este momento. Intenta de nuevo en unos segundos.'
@@ -83,7 +79,11 @@ export async function api(path, options) {
   try {
     return await send(path, options)
   } catch (error) {
-    if (error.status === 403 && typeof error.data?.detail === 'string' && error.data.detail.startsWith('CSRF Failed:')) {
+    // El backend responde lo mismo a todo 403 ("Acceso no autorizado."), así que un token CSRF vencido no se
+    // distingue de un permiso negado: en escrituras se renueva el token y se reintenta UNA vez (un 403 no cambió
+    // nada, el reintento es seguro). El login no se reintenta: contaría doble en el bloqueo por intentos.
+    const method = options?.method ?? 'GET'
+    if (error.status === 403 && method !== 'GET' && path !== '/auth/login/') {
       csrfTokenValue = ''
       await ensureCsrfToken(true)
       return send(path, options)

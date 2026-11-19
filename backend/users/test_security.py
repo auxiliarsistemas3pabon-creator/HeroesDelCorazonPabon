@@ -46,7 +46,7 @@ class AdminLoginPrivateWindowTests(APITestCase):
     """El login del panel de administración carga el mismo bloqueo de ventanas privadas que el frontend."""
 
     def test_admin_login_loads_the_private_window_check(self):
-        response = self.client.get("/admin/login/")
+        response = self.client.get("/django-admin/login/")
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, 'src="/static/security/private-window.js"')
         self.assertContains(response, 'id="login-form"')
@@ -64,7 +64,7 @@ class AdminLoginPrivateWindowTests(APITestCase):
 
 
 class EndpointNavigationGateTests(APITestCase):
-    """Abrir un endpoint directamente en el navegador solo se permite desde una sesión del panel /admin/."""
+    """Abrir un endpoint directamente en el navegador solo se permite desde una sesión del panel /django-admin/."""
 
     NAVIGATION = {"HTTP_SEC_FETCH_DEST": "document", "HTTP_SEC_FETCH_MODE": "navigate"}
     PATHS = ("/", "/api/", "/api/v1/", "/api/v1/questions/evaluations/", "/api/v1/auth/me/")
@@ -74,7 +74,7 @@ class EndpointNavigationGateTests(APITestCase):
             username=username_for("panel.admin"), password=PASSWORD, first_name="Panel", last_name="Admin",
             role=User.Role.SUPERADMIN, is_staff=True, **extra,
         )
-        self.client.force_login(staff)  # sesión del panel /admin/ (no JWT)
+        self.client.force_login(staff)  # sesión del panel /django-admin/ (no JWT)
         return staff
 
     def test_browser_navigation_outside_the_admin_panel_is_unauthorized(self):
@@ -90,7 +90,7 @@ class EndpointNavigationGateTests(APITestCase):
         self.assertTrue(AuditEvent.objects.filter(action="security.direct_navigation", outcome="blocked").exists())
 
     def test_app_session_is_not_enough_only_the_admin_panel(self):
-        # Una sesión de la app (JWT en cookie) no es una sesión del panel /admin/.
+        # Una sesión de la app (JWT en cookie) no es una sesión del panel /django-admin/.
         self.client.force_authenticate(create_user("app.only", User.Role.SUPERADMIN))
         self.assertEqual(self.client.get("/api/v1/auth/me/", **self.NAVIGATION).status_code, 403)
 
@@ -107,7 +107,7 @@ class EndpointNavigationGateTests(APITestCase):
 
     def test_admin_panel_lists_the_endpoints(self):
         self.admin_session()
-        response = self.client.get("/admin/", **self.NAVIGATION)
+        response = self.client.get("/django-admin/", **self.NAVIGATION)
         self.assertContains(response, 'id="api-endpoints"')
         self.assertContains(response, 'href="/api/v1/auth/me/"')
 
@@ -122,11 +122,11 @@ class EndpointNavigationGateTests(APITestCase):
         for headers in (fetch, {}):
             with self.subTest(headers=headers):
                 self.assertEqual(self.client.get("/api/", **headers).json()["version"], "v1")
-                self.assertEqual(self.client.get("/", **headers).json(), {"status": "ok"})
+                self.assertEqual(self.client.get("/healthz", **headers).json(), {"status": "ok"})
                 self.assertEqual(self.client.get("/api/v1/questions/evaluations/", **headers).status_code, 401)
 
     def test_admin_and_static_files_are_not_intercepted(self):
-        response = self.client.get("/admin/login/", **self.NAVIGATION)
+        response = self.client.get("/django-admin/login/", **self.NAVIGATION)
         self.assertContains(response, 'id="login-form"')
         self.assertNotContains(response, "api-gate.js")
 
@@ -142,12 +142,14 @@ class LoginSecurityTests(APITestCase):
     def post(self, username, password, **extra):
         return self.client.post(LOGIN, {"username": username, "password": password, **extra}, format="json")
 
-    def test_unknown_user_gets_user_not_found(self):
+    def test_unknown_user_gets_the_same_answer_as_a_wrong_password(self):
+        # No se revela qué documentos existen: el motivo real (unknown_user) solo queda en el log.
         with self.assertLogs("django.security", "WARNING") as logs:
             r = self.post(username_for("nadie.registrado"), PASSWORD)
         self.assertEqual(r.status_code, 401)
-        self.assertEqual(r.data["code"], "user_not_found")
-        self.assertIn("PERMISO NO AUTORIZADO", logs.output[0])
+        self.assertEqual(r.data, {"detail": "Acceso no autorizado.", "code": "unauthorized_access"})
+        self.assertEqual(r.data, self.post(username_for("colab.demo"), WRONG_PASSWORD).data)
+        self.assertIn("reason=unknown_user", logs.output[0])
         self.assertNotIn("access_token", r.cookies)
 
     def test_wrong_password_for_registered_user_is_unauthorized_access(self):
@@ -177,7 +179,7 @@ class LoginSecurityTests(APITestCase):
         self.assertIn("access_token", login.cookies)
         # La clave anterior deja de servir y el no registrado sigue sin acceso.
         self.assertEqual(APIClient().post(LOGIN, {"username": username_for("colab.demo"), "password": PASSWORD}, format="json").status_code, 401)
-        self.assertEqual(self.post(username_for("nadie.registrado"), NEW_PASSWORD).data["code"], "user_not_found")
+        self.assertEqual(self.post(username_for("nadie.registrado"), NEW_PASSWORD).status_code, 401)
 
     def test_password_reset_does_not_reactivate_disabled_account(self):
         self.user.is_active = False
@@ -219,7 +221,7 @@ class LoginSecurityTests(APITestCase):
     def test_private_mode_is_rejected(self):
         r = self.post(username_for("colab.demo"), PASSWORD, private_mode=True)
         self.assertEqual(r.status_code, 403)
-        self.assertEqual(r.data["code"], "private_mode")
+        self.assertEqual(r.data["code"], "unauthorized_access")
         self.assertNotIn("access_token", r.cookies)
 
 
