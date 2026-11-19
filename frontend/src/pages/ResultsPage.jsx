@@ -9,6 +9,7 @@ import { DateRangeFilter } from '../components/ui/DateRangeFilter'
 import { ALERT_ERROR, LABEL, PAGE_SUBTITLE, PAGE_TITLE, TH } from '../components/ui/styles'
 import { useAuth } from '../context/AuthContext'
 import { api, errorMessage } from '../lib/api'
+import { averageLabel } from '../lib/ratingScales'
 import { ReviewModal } from './ReviewPage'
 
 
@@ -58,6 +59,18 @@ function SortableHeader({ children, sortKey, activeSort, direction, onSort, alig
         </span>
       </button>
     </th>
+  )
+}
+
+// Nota de una celda: en escalas cualitativas el resultado (p. ej. "Bueno") va primero y el promedio numérico debajo.
+function ScoreCell({ value, label, strong = false }) {
+  if (value == null) return '—'
+  if (label == null) return strong ? <strong className="text-lg font-bold text-primary">{value}</strong> : value
+  return (
+    <span className="inline-flex flex-col items-center leading-tight">
+      <span className={strong ? 'text-base font-bold text-primary' : 'font-semibold text-app'}>{label}</span>
+      <small className="text-xs text-app-muted">{value}</small>
+    </span>
   )
 }
 
@@ -111,6 +124,10 @@ export function ResultsPage() {
 
   // El selector de evaluación solo lista las del tipo de programación elegido.
   const kindEvaluations = (evaluations || []).filter((item) => kindOf(item) === kind)
+  // Escala de la evaluación elegida: si es cualitativa, cada nota se muestra con su resultado (Bueno, Excelente...).
+  // En "Todas" se mezclan escalas, así que solo se muestran números.
+  const ratingType = evaluation === 'all' ? null : evaluations?.find((item) => String(item.id) === evaluation)?.rating_type
+  const qualitative = (value) => averageLabel(ratingType, value)
 
   // Los filtros Área/Persona/Cargo se derivan de las filas ya cargadas (en cascada: persona y cargo dependen del área).
   const areas = [...new Set((data?.rows || []).map((row) => row.area).filter(Boolean))].sort()
@@ -166,8 +183,15 @@ export function ResultsPage() {
       'Persona evaluada': row.name,
       Cargo: row.position || '',
       Área: row.area || '',
-      ...Object.fromEntries(data.categories.map((category) => [category.name, row.by_category[category.code] ?? ''])),
+      ...Object.fromEntries(data.categories.flatMap((category) => {
+        const value = row.by_category[category.code]
+        const label = qualitative(value)
+        return label == null
+          ? [[category.name, value ?? '']]
+          : [[category.name, value ?? ''], [`${category.name} (resultado)`, label]]
+      })),
       'Promedio general': row.average ?? '',
+      ...(qualitative(row.average) != null ? { 'Resultado general': qualitative(row.average) } : {}),
       'Fecha de realización': row.performed_at ? formatShortDate(row.performed_at) : '',
     }))
     const book = XLSX.utils.book_new()
@@ -240,7 +264,6 @@ export function ResultsPage() {
                 placeholder="Seleccione el tipo de programación"
                 options={KIND_OPTIONS}
               />
-              <span className="text-xs font-normal text-app-muted">Seleccione el tipo de programación de evaluación.</span>
             </label>
             <EvaluationSelect
               evaluations={kindEvaluations}
@@ -311,9 +334,13 @@ export function ResultsPage() {
                     </td>
                     <td className="min-w-[150px] whitespace-nowrap px-3 py-3 text-center">{row.area || '—'}</td>
                     {data.categories.map((category) => (
-                      <td key={category.code} className="min-w-[180px] whitespace-nowrap px-3 py-3 text-center">{row.by_category[category.code] ?? '—'}</td>
+                      <td key={category.code} className="min-w-[180px] whitespace-nowrap px-3 py-3 text-center">
+                        <ScoreCell value={row.by_category[category.code]} label={qualitative(row.by_category[category.code])} />
+                      </td>
                     ))}
-                    <td className="min-w-[160px] whitespace-nowrap px-3 py-3 text-center"><strong className="text-lg font-bold text-primary">{row.average}</strong></td>
+                    <td className="min-w-[160px] whitespace-nowrap px-3 py-3 text-center">
+                      <ScoreCell value={row.average} label={qualitative(row.average)} strong />
+                    </td>
                     <td className="min-w-[160px] whitespace-nowrap px-3 py-3 text-center">{row.performed_at ? formatShortDate(row.performed_at) : '—'}</td>
                     <td className="whitespace-nowrap px-3 py-3 text-center">
                       <Button

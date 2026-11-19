@@ -32,7 +32,6 @@ describe('ResultsPage: tipo de programación', () => {
     render(<ResultsPage />)
     expect(await screen.findByText('Persona grupal')).toBeInTheDocument()
     expect(mockApi).toHaveBeenCalledWith(expect.stringMatching(/results-summary\/\?kind=group/))
-    expect(screen.getByText('Seleccione el tipo de programación de evaluación.')).toBeInTheDocument()
 
     fireEvent.click(screen.getByRole('combobox', { name: /Tipo de programación/ }))
     fireEvent.click(screen.getByRole('option', { name: 'Individual (autoevaluación)' }))
@@ -43,5 +42,21 @@ describe('ResultsPage: tipo de programación', () => {
     fireEvent.click(screen.getByRole('combobox', { name: /^Evaluación/ }))
     expect(screen.getByRole('option', { name: 'Autoevaluación' })).toBeInTheDocument()
     expect(screen.queryByRole('option', { name: 'Desempeño grupal' })).not.toBeInTheDocument()
+  })
+
+  it('en escalas cualitativas muestra el resultado (Bueno) junto al promedio', async () => {
+    const descriptive = { id: 3, name: 'Cualitativa', kind: 'group', rating_type: 'descriptive', closes_on: '2099-12-31' }
+    mockApi.mockImplementation((path) => Promise.resolve(path.startsWith('/questions/evaluations/')
+      ? [descriptive]
+      : {
+          evaluation: descriptive,
+          categories: [{ code: 'a', name: 'Actitud' }],
+          rows: [{ personal: 9, name: 'Daniela', area: 'Enfermería', position: '', by_category: { a: '2.8' }, average: '4.6', performed_at: '2026-11-19' }],
+        }))
+    render(<ResultsPage />)
+    expect(await screen.findByText('Bueno')).toBeInTheDocument()
+    expect(screen.getByText('2.8')).toBeInTheDocument()
+    expect(screen.getByText('Excelente')).toBeInTheDocument()
+    expect(screen.getByText('4.6')).toBeInTheDocument()
   })
 })

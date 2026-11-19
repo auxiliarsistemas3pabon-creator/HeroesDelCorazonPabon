@@ -14,6 +14,7 @@ const FormCreatePage = lazy(() => import('./pages/FormCreatePage').then((module)
 const FormProgramPage = lazy(() => import('./pages/FormProgramPage').then((module) => ({ default: module.FormProgramPage })))
 const ResultsPage = lazy(() => import('./pages/ResultsPage').then((module) => ({ default: module.ResultsPage })))
 const StaffImportPage = lazy(() => import('./pages/StaffImportPage').then((module) => ({ default: module.StaffImportPage })))
+const CreateUserPage = lazy(() => import('./pages/CreateUserPage').then((module) => ({ default: module.CreateUserPage })))
 const UsersAdminPage = lazy(() => import('./pages/UsersAdminPage').then((module) => ({ default: module.UsersAdminPage })))
 
 class PageLoadBoundary extends Component {
@@ -93,6 +94,7 @@ function App() {
             {/* Solo el superadmin carga datos y administra usuarios; el backend lo exige igualmente */}
             <Route path="/staff" element={<RoleRoute roles={SUPERADMIN}><StaffImportPage /></RoleRoute>} />
             <Route path="/users" element={<RoleRoute roles={SUPERADMIN}><UsersAdminPage /></RoleRoute>} />
+            <Route path="/users/create" element={<RoleRoute roles={SUPERADMIN}><CreateUserPage /></RoleRoute>} />
             <Route path="*" element={<HomeRedirect />} />
           </Route>
         </Routes>

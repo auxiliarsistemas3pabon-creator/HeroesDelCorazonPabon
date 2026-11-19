@@ -3,7 +3,7 @@ import { DateGrain } from './date'
 import { formatDay, today } from './dates'
 import { mediaUrl } from './media'
 import { cn } from './cn'
-import { RATING_SCALES, ratingLabel, ratingScale } from './ratingScales'
+import { RATING_SCALES, averageLabel, ratingLabel, ratingScale } from './ratingScales'
 
 describe('utilidades', () => {
   it('DateGrain es inmutable', () => {
@@ -33,6 +33,14 @@ describe('utilidades', () => {
     expect(ratingLabel('descriptive', 5)).toBe('Excelente')
     expect(ratingLabel('descriptive_compliance', 0)).toBe('No aplica')
     expect(ratingLabel('quantitative', 9)).toBe(9)
+  })
+
+  it('averageLabel redondea el promedio al nivel cualitativo más cercano', () => {
+    expect(averageLabel('descriptive', '2.8')).toBe('Bueno')
+    expect(averageLabel('descriptive_performance', 4.5)).toBe('Excelente')
+    expect(averageLabel('descriptive_compliance', 0.4)).toBe('No cumple')
+    expect(averageLabel('quantitative', 4)).toBeNull()
+    expect(averageLabel('descriptive', null)).toBeNull()
   })
   it('vi disponible', () => expect(vi).toBeDefined())
 })

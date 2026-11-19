@@ -27,7 +27,19 @@ const BOSS_LINKS = [
 const LINKS = {
   boss: BOSS_LINKS,
   // El superadmin hace todo lo del jefe y además carga datos (personal y evaluaciones).
-  superadmin: [...BOSS_LINKS, { to: '/users', label: 'Usuarios', icon: Users }, { to: '/staff', label: 'Cargar datos', icon: Users }],
+  superadmin: [
+    ...BOSS_LINKS,
+    // Submenú: administrar cuentas existentes y crear nuevas.
+    {
+      label: 'Usuarios',
+      icon: Users,
+      children: [
+        { to: '/users', label: 'Administrar usuarios', end: true },
+        { to: '/users/create', label: 'Crear usuario' },
+      ],
+    },
+    { to: '/staff', label: 'Cargar datos', icon: Users },
+  ],
   collaborator: [
     { to: '/evaluations', label: 'Evaluar', icon: ClipboardList },
     { to: '/self-evaluation', label: 'Autoevaluación', icon: UserCheck },

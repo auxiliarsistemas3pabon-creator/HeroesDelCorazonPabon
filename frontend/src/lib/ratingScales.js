@@ -66,3 +66,16 @@ export function ratingScale(type = 'quantitative') {
 export function ratingLabel(type, score) {
   return ratingScale(type).options.find((option) => option.score === Number(score))?.label ?? score
 }
+
+export const isQualitative = (type) => Boolean(type?.startsWith('descriptive') && RATING_SCALES[type])
+
+// Resultado cualitativo de un promedio (p. ej. 2.8 en "Malo a Excelente" -> 3 -> "Bueno"): se redondea al nivel
+// más cercano, acotado a las notas que puntúan (0 = "No aplica" no entra al promedio). null si no aplica.
+export function averageLabel(type, average) {
+  if (!isQualitative(type) || average == null || average === '') return null
+  const value = Number(average)
+  if (!Number.isFinite(value)) return null
+  const scores = ratingScale(type).options.map((option) => option.score).filter((score) => score > 0)
+  const level = Math.min(Math.max(Math.round(value), Math.min(...scores)), Math.max(...scores))
+  return ratingLabel(type, level)
+}
