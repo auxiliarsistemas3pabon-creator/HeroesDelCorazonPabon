@@ -1,11 +1,14 @@
-import { ClipboardList, List, ListPlus, LayoutDashboard, LogOut, Menu, Trophy, User, UserCheck, Users, X } from 'lucide-react'
+import { ClipboardList, KeyRound, List, ListPlus, LayoutDashboard, LogOut, Menu, Trophy, User, UserCheck, Users, X } from 'lucide-react'
 import { useState } from 'react'
 import { Link, NavLink, Navigate, Outlet } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
 import { cn } from '../lib/cn'
+import { useIdleLogout } from '../lib/useIdleLogout'
 import { Button } from './ui/Button'
 import { mediaUrl } from '../lib/media'
-
+import { ChangePasswordForm } from '../pages/ChangePasswordPage'
+import { PAGE_TITLE } from './ui/styles'
+ 
 // Menú lateral por rol (`user.role`: 'boss' | 'superadmin' | 'collaborator'). Es solo navegación: el control
 // real de acceso lo hace el backend; ocultar un enlace aquí no protege la ruta.
 const BOSS_LINKS = [
@@ -49,21 +52,37 @@ const LINKS = {
   collaborator: COLLABORATOR_LINKS,
 }
 
-const ROLE_LABELS = { boss: 'Coordinador', superadmin: 'Administrador', collaborator: 'Colaborador' }
+const ROLE_LABELS = { boss: 'Coordinador', superadmin: 'Superadministrador', collaborator: 'Colaborador' }
 
 // Layout de todas las páginas autenticadas: cabecera, menú lateral y <Outlet/> con la página activa.
 // Actúa también de guardia de sesión (ver redirecciones abajo).
 export function Layout() {
-  const { user, loading, logout, realtimeStatus, realtimeNotice } = useAuth()
+  const { user, loading, logout, updateUser, realtimeStatus, realtimeNotice } = useAuth()
   const [open, setOpen] = useState(false)
   const realtimeConnected = realtimeStatus === 'connected'
   const realtimeUnavailable = realtimeStatus === 'unavailable'
+  // Capa 20: sin actividad se cierra la sesión en el servidor; si esa llamada falla, igual se sale en el cliente.
+  useIdleLogout(Boolean(user), () => { logout().catch(() => updateUser(null)) })
 
   // Mientras AuthContext consulta /auth/me/ no se redirige: evitaría un rebote a /login en cada recarga.
   if (loading) return null
   if (!user) return <Navigate to="/login" replace />
-  // Contraseña temporal (p. ej. recién cargada desde el Excel de personal): obliga a cambiarla antes de usar la app.
-
+  // Clave inicial (Cargar personal / Crear usuario): hasta cambiarla solo se muestra el formulario. El backend también
+  // bloquea el resto de la API, así que esto no es la protección, solo evita pantallas que fallarían.
+  if (user.password_change_required) {
+    return (
+      <main className="flex min-h-dvh flex-col items-center justify-center gap-4 bg-app px-4 py-8">
+        <div className="w-full max-w-md">
+          <h1 className={PAGE_TITLE}>Cambia tu contraseña</h1>
+          <p className="mt-1 text-sm text-app-muted">Hola, {user.first_name}. Es tu primer ingreso.</p>
+        </div>
+        <ChangePasswordForm forced />
+        <Button type="button" variant="secondary" size="sm" onClick={logout} leftIcon={<LogOut size={16} />}>
+          Salir
+        </Button>
+      </main>
+    )
+  }
 
   return (
     <div className="flex min-h-dvh flex-col bg-app">
@@ -116,6 +135,14 @@ export function Layout() {
                 {ROLE_LABELS[user.role]}
               </span>
             </div>
+            <Link
+              to="/account/password"
+              className="inline-flex h-9 w-9 items-center justify-center rounded-lg border border-app text-app-muted hover:bg-app-muted hover:text-app"
+              aria-label="Cambiar contraseña"
+              title="Cambiar contraseña"
+            >
+              <KeyRound size={16} aria-hidden="true" />
+            </Link>
             <Button type="button" variant="secondary" size="sm" onClick={logout} leftIcon={<LogOut size={16} />}>
               <span className="hidden sm:inline">Salir</span>
             </Button>

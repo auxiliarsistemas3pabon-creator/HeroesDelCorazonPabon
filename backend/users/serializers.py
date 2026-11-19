@@ -1,3 +1,4 @@
+from django.conf import settings
 from django.contrib.auth.password_validation import validate_password
 from django.core.exceptions import ValidationError as DjangoValidationError
 from django.utils.translation import gettext_lazy as _
@@ -45,8 +46,12 @@ class AuthenticatedUserSerializer(UserSerializer):
 
 
 class RegisterSerializer(serializers.ModelSerializer[User]):
-    """Superadmin-managed collaborator creation. Role is never accepted from the request."""
-    password = serializers.CharField(write_only=True, required=True, min_length=8)
+    """Superadmin-managed collaborator creation. Role is never accepted from the request.
+
+    Without `password` the account gets settings.DEFAULT_USER_PASSWORD. Either way the superadmin knows the password,
+    so the account must change it on first sign-in (password_change_required).
+    """
+    password = serializers.CharField(write_only=True, required=False, min_length=8)
 
     class Meta:
         model = User
@@ -101,8 +106,8 @@ class RegisterSerializer(serializers.ModelSerializer[User]):
         return value
 
     def create(self, validated_data):
-        password = validated_data.pop("password")
-        return User.objects.create_user(password=password, **validated_data)
+        password = validated_data.pop("password", None) or settings.DEFAULT_USER_PASSWORD
+        return User.objects.create_user(password=password, password_change_required=True, **validated_data)
 
 
 class PasswordChangeSerializer(serializers.Serializer):
@@ -138,6 +143,11 @@ class PasswordChangeSerializer(serializers.Serializer):
             if not target.check_password(current):
                 raise serializers.ValidationError(
                     {"current_password": _("The current password is incorrect.")}
+                )
+            # La clave inicial es de todos: quien la cambia debe elegir una propia.
+            if attrs["new_password"] == settings.DEFAULT_USER_PASSWORD or attrs["new_password"] == current:
+                raise serializers.ValidationError(
+                    {"new_password": ["Elige una contraseña distinta a la actual y a la contraseña inicial."]}
                 )
 
         return attrs

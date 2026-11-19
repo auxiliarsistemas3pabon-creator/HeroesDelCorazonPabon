@@ -1,5 +1,6 @@
 import { useId, useRef, useState } from 'react'
-import { Upload } from 'lucide-react'
+import { Download, Upload } from 'lucide-react'
+import * as XLSX from 'xlsx'
 import { Button } from '../components/ui/Button'
 import { Card } from '../components/ui/Card'
 import { ALERT_ERROR, FIELD, LABEL, PAGE_TITLE } from '../components/ui/styles'
@@ -8,8 +9,8 @@ import { api, errorMessage } from '../lib/api'
 // Tarjeta para subir un archivo y mostrar el resultado de la carga. `children` son campos extra del formulario.
 /**
  * Sube un archivo por multipart (FormData) a `path` y pinta el informe del backend: creados, omitidos
- * (ya existían; la carga es idempotente), filas con error y, en la carga de personal, las credenciales
- * temporales. `extra` agrega campos de formulario opcionales (se omiten los vacíos).
+ * (ya existían; la carga es idempotente) y filas con error. `extra` agrega campos de formulario opcionales
+ * (se omiten los vacíos).
  */
 function UploadCard({ title, hint, accept, path, extra = {}, unit, submitLabel, children }) {
   const input = useRef(null)
@@ -121,22 +122,10 @@ function UploadCard({ title, hint, accept, path, extra = {}, unit, submitLabel, 
                 </ul>
               </>
             )}
-            {/* Seguridad: el backend entrega las contraseñas temporales una sola vez; no se persisten en el cliente. */}
-            {result.initial_credentials?.length > 0 && (
-              <section className="mt-4 space-y-2 rounded-lg border border-amber-300 bg-amber-50 p-3 text-amber-950">
-                <h4 className="font-semibold">Credenciales temporales — guárdalas ahora</h4>
-                <p>
-                  Se muestran solo en este resultado. Entrégalas directamente a cada persona; deberán
-                  cambiarlas al iniciar sesión.
-                </p>
-                <ul className="space-y-1">
-                  {result.initial_credentials.map(({ username, password }) => (
-                    <li key={username} className="break-all">
-                      <strong>{username}</strong>: <code>{password}</code>
-                    </li>
-                  ))}
-                </ul>
-              </section>
+            {result.created > 0 && (
+              <p className="text-app-muted">
+                Las personas creadas inician sesión con su documento y la contraseña inicial; en su primer ingreso deberán cambiarla.
+              </p>
             )}
           </div>
         )}
@@ -145,7 +134,32 @@ function UploadCard({ title, hint, accept, path, extra = {}, unit, submitLabel, 
   )
 }
 
-// Carga masiva (solo jefe/administración): personal (crea usuarios, usuario = documento) y evaluaciones (estructura de preguntas).
+// Plantilla de "Cargar personal": los encabezados que reconoce users/staff_import.py. La hoja que se carga va vacía
+// a propósito (subirla sin borrar ejemplos crearía cuentas reales); los ejemplos van en otra hoja, que no se lee.
+const STAFF_HEADERS = ['Número de documento', 'Nombres', 'Apellidos', 'Área', 'Cargo', 'Rol']
+const STAFF_INSTRUCTIONS = [
+  ['Cómo llenar la hoja "Personal"'],
+  ['Obligatorias: Número de documento, Nombres, Área y Cargo. Opcionales: Apellidos y Rol.'],
+  ['Rol: Colaborador o Coordinador. Vacío = Colaborador. Los superadministradores se crean uno a uno en Usuarios.'],
+  ['Todos reciben la contraseña inicial y deben cambiarla en su primer ingreso. Un documento que ya existe no se modifica.'],
+  [],
+  ['Ejemplo (no se carga):'],
+  STAFF_HEADERS,
+  ['1098765432', 'Daniela Fernanda', 'Ortiz Guzmán', 'Enfermería', 'Enfermera profesional', 'Colaborador'],
+  ['1012345678', 'Carlos Andrés', 'Rojas Pérez', 'Enfermería', 'Jefe de enfermería', 'Coordinador'],
+]
+
+function downloadStaffTemplate() {
+  const book = XLSX.utils.book_new()
+  const sheet = XLSX.utils.aoa_to_sheet([STAFF_HEADERS])
+  sheet['!cols'] = [{ wch: 20 }, { wch: 22 }, { wch: 22 }, { wch: 18 }, { wch: 26 }, { wch: 14 }]
+  // La primera hoja es la que se carga.
+  XLSX.utils.book_append_sheet(book, sheet, 'Personal')
+  XLSX.utils.book_append_sheet(book, XLSX.utils.aoa_to_sheet(STAFF_INSTRUCTIONS), 'Instrucciones')
+  XLSX.writeFile(book, 'Plantilla cargar personal.xlsx')
+}
+
+// Carga masiva (solo administración): personal (crea usuarios, usuario = documento).
 export function StaffImportPage() {
   return (
     <div className="space-y-6">
@@ -157,8 +171,14 @@ export function StaffImportPage() {
         accept=".xlsx"
         path="/users/import/"
         unit="Personas"
-        hint="Excel (.xlsx) con las columnas: Número de documento, Nombres, Apellidos (opcional), Área y Cargo. Si un documento ya existe, no se duplica ni se modifica. El documento es el usuario; las contraseñas temporales únicas se mostrarán una sola vez al completar la carga."
-      />
+        hint="Excel (.xlsx) con las columnas: Número de documento, Nombres, Apellidos (opcional), Área, Cargo y Rol (opcional: Colaborador o Coordinador; vacío = Colaborador). Si un documento ya existe, no se duplica ni se modifica. El documento es el usuario y todos reciben la contraseña inicial, que deberán cambiar en su primer ingreso. Los superadministradores se crean uno a uno en Usuarios."
+      >
+        <div>
+          <Button type="button" variant="secondary" size="sm" onClick={downloadStaffTemplate}>
+            <Download size={16} aria-hidden="true" /> Descargar plantilla
+          </Button>
+        </div>
+      </UploadCard>
 
     </div>
   )

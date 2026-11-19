@@ -7,6 +7,7 @@ import { useAuth } from '../context/AuthContext'
 import { errorMessage } from '../lib/api'
 import { mediaUrl } from '../lib/media'
 import { detectPrivateMode } from '../lib/privateMode'
+import { IDLE_MINUTES, takeLogoutReason } from '../lib/useIdleLogout'
 
 // Textos de marketing del panel izquierdo. Mantenerlos alineados con las reglas reales (escala, cierre).
 const FEATURES = [
@@ -22,6 +23,8 @@ export function LoginPage() {
   const navigate = useNavigate()
   const [form, setForm] = useState({ username: '', password: '' })
   const [error, setError] = useState(null)
+  // Capa 20: si la sesión se cerró por inactividad, se avisa una vez.
+  const [idleNotice] = useState(() => takeLogoutReason() === 'idle')
   const [loading, setLoading] = useState(false)
   const [privateMode, setPrivateMode] = useState(false)
   // Los campos se habilitan solo cuando termina la verificación del navegador (unos segundos en Chromium).
@@ -126,6 +129,11 @@ export function LoginPage() {
 
           <form onSubmit={onSubmit} className="flex flex-col gap-2.5">
             {checking && <p role="status" className="text-xs text-app-muted">Verificando navegador…</p>}
+            {idleNotice && !error && (
+              <div role="status" className="rounded-lg border border-amber-300 bg-amber-50 p-3 text-sm text-amber-900">
+                Tu sesión se cerró por {IDLE_MINUTES} minutos de inactividad. Vuelve a ingresar.
+              </div>
+            )}
             {error && <div role="alert" className={ALERT_ERROR}>{error}</div>}
             <label className={LABEL}>
               Usuario

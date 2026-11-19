@@ -1,0 +1,368 @@
+===============================================================================
+ HÉROES DEL CORAZÓN — CAPAS DE SEGURIDAD Y PRUEBAS MANUALES
+ Clínica Pabón · Fecha: 2026-11-19
+===============================================================================
+
+RESUMEN
+-------
+Criterio: una clínica necesita como mínimo 7 capas de seguridad; el objetivo
+máximo de este proyecto es 25.
+
+  Capas que ya existían ........ 19  (1 a 19)
+  Capas implementadas ahora .... 6   (20 a 25)
+  TOTAL ........................ 25 / 25
+
+  Pendientes fuera del código (operación / decisión): ver la sección final
+  "RIESGOS Y PENDIENTES". No suman capas porque no se pueden implementar solo
+  con código o requieren una decisión de la clínica.
+
+ENTORNOS PARA PROBAR
+--------------------
+  Local (Docker):    API      http://localhost:8001
+                     Frontend http://localhost:5173   (.\heroes.ps1 front)
+  Producción:        https://heroesdelcorazon-pabon-1.onrender.com  (app)
+                     https://heroesdelcorazon-pabon.onrender.com    (API)
+
+  En PowerShell usar  curl.exe  (no "curl", que es un alias de otro comando).
+  "Consola del navegador" = F12 > pestaña Console, con la app abierta y la
+  sesión iniciada. "Shell de Django" = .\heroes.ps1 shell  (desde la raíz).
+
+  Use SOLO cuentas de prueba. Varias pruebas bloquean o cierran sesiones.
+
+Cada capa indica: QUÉ PROTEGE · DÓNDE ESTÁ · CÓMO PROBARLA · RESULTADO ESPERADO.
+
+
+===============================================================================
+ GRUPO A — AUTENTICACIÓN Y CONTRASEÑAS
+===============================================================================
+
+CAPA 1 · Política de contraseñas
+  Qué protege : contraseñas débiles, adivinables.
+  Dónde       : backend/config/settings/base.py (AUTH_PASSWORD_VALIDATORS)
+  Cómo probar : 1. Inicie sesión y pulse el ícono de llave (Cambiar contraseña).
+                2. Como nueva contraseña escriba 12345678 y confírmela.
+                3. Repita con "password1" y con su número de documento.
+  Esperado    : se rechaza cada una (solo números / muy común / parecida al
+                usuario / menos de 8 caracteres). La contraseña no cambia.
+
+CAPA 2 · Almacenamiento seguro de contraseñas (hash)
+  Qué protege : que un robo de la base revele las contraseñas.
+  Dónde       : Django (PBKDF2-SHA256 con sal, cientos de miles de iteraciones)
+  Cómo probar : Shell de Django:
+                  from users.models import User
+                  print(User.objects.first().password[:40])
+  Esperado    : empieza por  pbkdf2_sha256$  ; nunca la contraseña en claro.
+
+CAPA 3 · Bloqueo por fuerza bruta (django-axes)
+  Qué protege : probar contraseñas una tras otra.
+  Dónde       : settings base.py (AXES_*), users/views.py LoginView
+  Cómo probar : 1. Con un usuario de prueba, escriba una contraseña incorrecta
+                   varias veces seguidas desde el mismo equipo (límite: 5).
+  Esperado    : al llegar al límite (5.º o 6.º intento) responde
+                "Demasiados intentos fallidos. Intenta más tarde." durante 1
+                hora para ese usuario DESDE ESA IP (otra IP no queda bloqueada,
+                así un atacante no puede bloquear la cuenta de otra persona).
+                Con la contraseña correcta el dueño sí entra.
+  Desbloquear : docker exec heroes_del_corazon_pabon-backend-1 python manage.py axes_reset
+
+CAPA 4 · Límite de peticiones (rate limiting)
+  Qué protege : abuso automatizado y saturación de la API.
+  Dónde       : base.py REST_FRAMEWORK DEFAULT_THROTTLE_RATES (anon 200/min,
+                usuario 1000/min, login 500/min)
+  Cómo probar : PowerShell (local):
+                  $c=0; 1..210 | % { try { Invoke-WebRequest http://localhost:8001/api/v1/auth/csrf/ -UseBasicParsing | Out-Null } catch { if ($_.Exception.Response.StatusCode.value__ -eq 429) { $c++ } } }; "429 recibidos: $c"
+  Esperado    : a partir de la petición ~201 del mismo minuto responde 429
+                (Too Many Requests). Al minuto siguiente vuelve a responder.
+
+CAPA 5 · Tokens en cookies httpOnly / Secure / SameSite
+  Qué protege : robo de la sesión por un script inyectado (XSS).
+  Dónde       : users/views.py _set_auth_cookies; settings AUTH_COOKIE_*
+  Cómo probar : 1. F12 > Application > Cookies del sitio.
+                2. En la consola escriba:  document.cookie
+  Esperado    : access_token y refresh_token tienen HttpOnly = ✓,
+                SameSite = Lax y, en producción, Secure = ✓.
+                document.cookie NO muestra access_token ni refresh_token.
+
+CAPA 6 · Rotación y revocación de tokens (cierre de sesión real)
+  Qué protege : reutilizar un token viejo o robado después de salir.
+  Dónde       : SIMPLE_JWT ROTATE/BLACKLIST; RefreshView y LogoutView
+  Cómo probar : 1. F12 > Application > Cookies: copie el valor de refresh_token
+                   y el de la cookie que empieza por did_ (nombre y valor).
+                2. Pulse "Salir" en la app.
+                3. curl.exe -i -X POST http://localhost:8001/api/v1/auth/refresh/ --cookie "refresh_token=VALOR; did_XXXX=VALOR"
+  Esperado    : 401 "Sesión expirada." — el token quedó en la lista negra.
+
+CAPA 7 · Sesión ligada al dispositivo
+  Qué protege : que un token copiado funcione en otro computador.
+  Dónde       : users/devices.py, common/authentication.py enforce_device
+  Cómo probar : 1. En Chrome, con sesión iniciada, copie el valor de access_token
+                   (F12 > Application > Cookies).
+                2. En otro navegador (Edge) abra http://localhost:5173, F12 >
+                   Application > Cookies, cree la cookie access_token con ese
+                   valor (sin la cookie did_...).
+                3. En la consola de Edge: fetch('/api/v1/auth/me/').then(r => r.status)
+  Esperado    : 401 (Device not recognized). Sin la cookie del dispositivo el
+                token no sirve.
+
+CAPA 18 (ver abajo) y CAPA 21 (nueva) también son de este grupo.
+
+
+===============================================================================
+ GRUPO B — CONTROL DE ACCESO
+===============================================================================
+
+CAPA 8 · Protección CSRF
+  Qué protege : que otra página haga acciones en nombre del usuario.
+  Dónde       : common/authentication.py enforce_csrf (doble cookie)
+  Cómo probar : Consola del navegador (sesión iniciada), petición SIN la
+                cabecera X-CSRFToken que la app envía siempre:
+                  fetch('/api/v1/auth/password-change/', {method:'POST', credentials:'include', headers:{'Content-Type':'application/json'}, body:'{}'}).then(r => r.status)
+  Esperado    : 403 (CSRF Failed). La app normal sí funciona porque envía el token.
+
+CAPA 9 · Control de acceso por rol (RBAC) en el servidor
+  Qué protege : que un colaborador use funciones de administración
+                aunque manipule el frontend.
+  Dónde       : common/permissions.py; permission_classes de cada vista
+  Cómo probar : 1. Inicie sesión como Colaborador.
+                2. Consola: fetch('/api/v1/users/admin/').then(r => r.status)
+                3. Consola: fetch('/api/v1/questions/results-summary/').then(r => r.status)
+                4. Escriba en la barra http://localhost:5173/users
+  Esperado    : 2 y 3 responden 403; en 4 la app lo devuelve a su inicio.
+                El superadmin NO puede enviar evaluaciones (403); el
+                coordinador sí, con las mismas reglas que un colaborador.
+
+CAPA 17 · Bloqueo de ventanas privadas / incógnito
+  Qué protege : sesiones en ventanas que no dejan rastro en equipos compartidos.
+  Dónde       : frontend/src/lib/privateMode.js; LoginView (private_mode);
+                common/navigation.py (página intermedia al abrir /api/ en el navegador)
+  Cómo probar : 1. Abra la app en una ventana de incógnito (Ctrl+Mayús+N).
+                2. Abra http://localhost:8001/api/v1/ directamente en una
+                   ventana de incógnito.
+  Esperado    : 1. El formulario de login queda deshabilitado con el aviso de
+                   ventanas privadas. 2. No se muestra el contenido JSON.
+
+CAPA 18 · Contraseña inicial con cambio obligatorio
+  Qué protege : la contraseña inicial Pabon2026* la conoce todo el mundo.
+  Dónde       : common/authentication.py enforce_password_change;
+                users/views.py PasswordChangeView; settings DEFAULT_USER_PASSWORD
+  Cómo probar : 1. Como superadmin: Usuarios > Crear usuario (sin contraseña).
+                2. Salga e ingrese con ese documento y Pabon2026*.
+                3. Consola: fetch('/api/v1/questions/evaluations/').then(r => r.json()).then(console.log)
+                4. Cambie la contraseña. Intente usar otra vez Pabon2026*.
+  Esperado    : 2. Solo aparece "Cambia tu contraseña" (sin menú).
+                3. 403 con code "password_change_required" (el bloqueo es del
+                   servidor, no solo de la pantalla).
+                4. Pabon2026* se rechaza como nueva clave; con una propia, la app
+                   abre normalmente.
+
+CAPA 19 · Ciclo de vida de cuentas
+  Qué protege : cuentas de personas que ya no trabajan; quedarse sin administrador.
+  Dónde       : users/views.py AdminUsersView
+  Cómo probar : 1. Usuarios > Administrar usuarios > Inhabilitar (cuenta de prueba).
+                2. Intente ingresar con esa cuenta.
+                3. Intente inhabilitar su propia cuenta o quitarse el rol de superadmin
+                   siendo el único superadministrador activo.
+  Esperado    : 2 no puede ingresar. 3 se rechaza: debe quedar al menos un
+                superadministrador activo.
+
+
+===============================================================================
+ GRUPO C — ENTRADAS, ARCHIVOS Y DATOS
+===============================================================================
+
+CAPA 10 · Filtro de entradas maliciosas + consultas parametrizadas
+  Qué protege : inyección SQL y scripts (XSS) en formularios y filtros.
+  Dónde       : common/security.py MaliciousInputMiddleware; ORM de Django
+  Cómo probar : curl.exe -i "http://localhost:8001/api/v1/auth/me/?q=1%27%20OR%20%271%27%3D%271"
+                curl.exe -i "http://localhost:8001/api/v1/auth/me/?q=%3Cscript%3Ealert(1)%3C/script%3E"
+  Esperado    : 403 {"detail": "Acceso no autorizado.", "code": "unauthorized_access"}
+                y una línea "PERMISO NO AUTORIZADO" en .\heroes.ps1 logs.
+
+CAPA 22 · (nueva) No guardar en caché datos de la API — ver abajo.
+CAPA 24 · (nueva) Validación de archivos subidos — ver abajo.
+
+
+===============================================================================
+ GRUPO D — TRANSPORTE Y NAVEGADOR
+===============================================================================
+
+CAPA 11 · Cabeceras de seguridad y CSP
+  Qué protege : clickjacking, ejecución de scripts externos, fugas por Referer.
+  Dónde       : frontend/nginx/security-headers.conf; settings (CSP, X_FRAME_OPTIONS)
+  Cómo probar : curl.exe -sI https://heroesdelcorazon-pabon-1.onrender.com/
+                (o https://securityheaders.com con esa URL)
+  Esperado    : Content-Security-Policy, X-Frame-Options: DENY,
+                X-Content-Type-Options: nosniff, Referrer-Policy,
+                Permissions-Policy, Cross-Origin-Opener-Policy.
+
+CAPA 12 · HTTPS obligatorio + HSTS
+  Qué protege : interceptar la conexión (Wi-Fi de la clínica, proxies).
+  Dónde       : prod.py (SECURE_SSL_REDIRECT, HSTS, cookies Secure); Render
+  Cómo probar : curl.exe -sI http://heroesdelcorazon-pabon-1.onrender.com/
+                curl.exe -sI https://heroesdelcorazon-pabon.onrender.com/ | findstr /i strict
+  Esperado    : la versión http redirige (301/308) a https; aparece
+                Strict-Transport-Security.
+
+CAPA 13 · CORS y orígenes de confianza
+  Qué protege : que otro sitio web lea la API con la sesión del usuario.
+  Dónde       : base.py CORS_ALLOWED_ORIGINS / CSRF_TRUSTED_ORIGINS
+  Cómo probar : curl.exe -si -X OPTIONS http://localhost:8001/api/v1/auth/login/ -H "Origin: https://atacante.example" -H "Access-Control-Request-Method: POST"
+                Repita con -H "Origin: http://127.0.0.1:5173"
+  Esperado    : con el origen atacante NO aparece Access-Control-Allow-Origin;
+                con el origen de la app sí.
+
+CAPA 15 · Minimización de información expuesta
+  Qué protege : dar pistas a un atacante (versiones, trazas de error).
+  Dónde       : nginx server_tokens off / proxy_hide_header; DEBUG=False en prod;
+                mensajes genéricos "Acceso no autorizado."
+  Cómo probar : curl.exe -sI https://heroesdelcorazon-pabon-1.onrender.com/ | findstr /i "server x-powered"
+                curl.exe -s https://heroesdelcorazon-pabon.onrender.com/api/v1/no-existe/
+  Esperado    : sin versión de nginx ni X-Powered-By; el 404 no muestra la
+                página de depuración de Django.
+
+
+===============================================================================
+ GRUPO E — SECRETOS, REGISTRO Y CADENA DE SUMINISTRO
+===============================================================================
+
+CAPA 14 · Registro estructurado de auditoría y seguridad (logs)
+  Qué protege : poder reconstruir qué pasó (y alertar si hay SENTRY_DSN).
+  Dónde       : audit/logging.py, common/security.py log_unauthorized
+  Cómo probar : .\heroes.ps1 logs   y, en otra ventana, haga un login fallido.
+  Esperado    : una línea JSON {"action": "login.post", "outcome": "failure", ...}
+                sin contraseñas ni tokens, y "PERMISO NO AUTORIZADO | reason=wrong_password".
+
+CAPA 16 · Gestión de secretos
+  Qué protege : claves en el código o claves débiles en producción.
+  Dónde       : variables de entorno; prod.py exige DJANGO_SECRET_KEY de 50+ caracteres;
+                render.yaml generateValue
+  Cómo probar : docker exec heroes_del_corazon_pabon-backend-1 sh -c "DJANGO_SETTINGS_MODULE=config.settings.prod DJANGO_SECRET_KEY=corta python manage.py check"
+  Esperado    : falla con ImproperlyConfigured (producción no arranca con una clave débil).
+
+
+===============================================================================
+ CAPAS NUEVAS (20 A 25) — IMPLEMENTADAS EL 2026-11-19
+===============================================================================
+
+CAPA 20 · Cierre de sesión por inactividad                       [NUEVA]
+  Qué protege : un computador de la clínica que queda con la sesión abierta.
+  Dónde       : frontend/src/lib/useIdleLogout.js (usado en Layout.jsx);
+                aviso en LoginPage.jsx. Minutos: VITE_IDLE_TIMEOUT_MINUTES (15 por defecto).
+                La actividad se comparte entre pestañas; el cierre llama a
+                /auth/logout/ (revoca el token en el servidor, no solo la pantalla).
+  Cómo probar : Rápido (local): cree frontend/.env.local con
+                  VITE_IDLE_TIMEOUT_MINUTES=1
+                reinicie .\heroes.ps1 front, inicie sesión y no toque nada ~1,5 min.
+                Real: en producción espere 15 minutos sin usar la app.
+                Además: trabaje en una pestaña y deje otra quieta.
+  Esperado    : vuelve al login con el aviso "Tu sesión se cerró por N minutos de
+                inactividad"; en F12 > Network aparece POST /api/v1/auth/logout/.
+                Mientras se use una pestaña, la otra NO se cierra.
+                Al terminar, borre frontend/.env.local.
+
+CAPA 21 · Revocación de sesiones al cambiar la contraseña        [NUEVA]
+  Qué protege : quien conoce la clave anterior y ya tiene una sesión abierta.
+  Dónde       : backend/users/sessions.py revoke_all_sessions; PasswordChangeView;
+                AdminUsersView (restablecer contraseña)
+  Cómo probar : 1. Inicie sesión con la MISMA cuenta en Chrome y en Edge.
+                2. En Chrome cambie la contraseña (ícono de llave).
+                3. En Edge haga clic en cualquier menú o recargue.
+                4. Variante: como superadmin restablezca la contraseña de una
+                   cuenta que tenga una sesión abierta en otro navegador.
+  Esperado    : 3. Edge queda fuera de inmediato (401) y vuelve al login; Chrome
+                   sigue dentro. 4. Todas las sesiones de esa cuenta se cierran.
+
+CAPA 22 · Las respuestas de la API no se guardan en caché         [NUEVA]
+  Qué protege : ver datos de la sesión anterior con "Atrás" o desde la caché
+                en un equipo compartido.
+  Dónde       : backend/common/security.py NoStoreApiMiddleware
+  Cómo probar : curl.exe -sI http://localhost:8001/api/v1/auth/me/
+                o F12 > Network > cualquier petición /api/ > Response Headers.
+  Esperado    : Cache-Control: no-store   y   Pragma: no-cache
+                (la raíz "/" y los estáticos no se ven afectados).
+
+CAPA 23 · Auditoría persistente, de solo inserción               [NUEVA]
+  Qué protege : poder demostrar quién hizo qué, cuándo y desde dónde (los logs
+                de Render se pierden). Nadie puede alterar ni borrar el registro.
+  Dónde       : backend/audit/models.py AuditEvent; audit/logging.py;
+                common/security.py (eventos "security.*"). Guarda: acción,
+                resultado, código HTTP, usuario, rol, IP real del cliente,
+                navegador. NUNCA contraseñas, cookies, tokens ni el cuerpo.
+  Cómo probar : 1. Haga un login fallido y una acción como superadmin
+                   (p. ej. cambiar el rol de una cuenta de prueba).
+                2. Shell de Django:
+                     from audit.models import AuditEvent
+                     for e in AuditEvent.objects.all()[:5]: print(e.created_at, e.action, e.outcome, e.status_code, e.actor_username, e.ip_address)
+                3. Intente alterarlo:
+                     e = AuditEvent.objects.first(); e.outcome = "x"; e.save()
+                     AuditEvent.objects.all().delete()
+                4. Con una cuenta de Django staff: /admin/ > Auditoría >
+                   Eventos de auditoría.
+  Esperado    : 2. Aparecen login.post failure, security.wrong_password blocked,
+                   admin-user-detail.patch success con usuario e IP.
+                3. AppendOnlyError en ambos casos.
+                4. Se puede buscar y filtrar, pero no hay botones de agregar,
+                   editar ni borrar.
+
+CAPA 24 · Validación de archivos subidos                         [NUEVA]
+  Qué protege : ejecutables renombrados, archivos gigantes o "zip bombs" en
+                Cargar datos / Importar evaluaciones o respuestas.
+  Dónde       : backend/common/uploads.py validate_upload; UPLOAD_MAX_MB (5)
+  Cómo probar : En Cargar datos > Cargar personal suba:
+                  a) un .pdf o .exe
+                  b) un .txt renombrado a .xlsx
+                  c) un .xlsx de más de 5 MB
+                  d) la plantilla real ("Descargar plantilla") con una fila
+  Esperado    : a) "Tipo de archivo no permitido."  b) "El archivo no es un
+                Excel válido (.xlsx)."  c) "El archivo supera el máximo de 5 MB."
+                d) se carga normalmente.
+
+CAPA 25 · Escaneo de vulnerabilidades en dependencias            [NUEVA]
+  Qué protege : librerías con fallas de seguridad conocidas (CVE).
+  Dónde       : .github/workflows/backend-ci.yml (job dependency-audit, pip-audit)
+                .github/workflows/frontend-ci.yml (job dependency-audit, npm audit)
+  Cómo probar : Local:
+                  docker exec heroes_del_corazon_pabon-backend-1 sh -c "pip install -q pip-audit && pip-audit -r requirements/prod.txt"
+                  cd frontend; npm audit --omit=dev
+                En GitHub: pestaña Actions tras un push a main.
+  Esperado    : backend "No known vulnerabilities found".
+                Al implementarla encontró 7 avisos: djangorestframework 3.18.0
+                (3 CVE) y daphne 4.2.1 (4 avisos); se actualizaron a 3.18.2 y 4.2.2.
+                frontend: 1 aviso ALTO en "xlsx" (SheetJS) sin arreglo en npm.
+                Solo afecta a LEER archivos Excel; esta app solo los GENERA
+                (exportar resultados, plantilla), así que no es explotable aquí.
+                El CI falla solo con severidad crítica. Ver pendiente P4.
+
+
+===============================================================================
+ PRUEBAS AUTOMÁTICAS QUE CUBREN LAS CAPAS NUEVAS
+===============================================================================
+  Backend : backend/users/test_security_layers.py (capas 21-24, 14 pruebas)
+            backend/users/test_password_change.py  (capa 18)
+            docker exec heroes_del_corazon_pabon-backend-1 python manage.py test questions.tests users --settings=config.settings.test
+  Frontend: frontend/src/lib/useIdleLogout.test.jsx (capa 20)
+            cd frontend; npx vitest run
+
+
+===============================================================================
+ RIESGOS Y PENDIENTES (no suman capas: operación o decisión de la clínica)
+===============================================================================
+  P1 · COPIAS DE SEGURIDAD — CRÍTICO. La base de Render es del plan gratuito:
+       no tiene backups automáticos y VENCE EL 2026-12-10 (se pierden los datos).
+       Pasarla a un plan pago (con backups diarios) o programar exportaciones.
+  P2 · Mensaje "Usuario no encontrado" en el login: revela qué documentos
+       existen (enumeración). Se dejó porque la app lo usa a propósito; para
+       cerrarlo, responder igual que con contraseña incorrecta.
+  P3 · La IP del cliente se toma del primer valor de X-Forwarded-For, que el
+       propio cliente puede inventar. Afecta al bloqueo por IP (capa 3) y a la
+       IP registrada (capa 23). Corregirlo requiere fijar la cabecera en el
+       proxy de Render con el valor real del cliente.
+  P4 · Cambiar "xlsx" de npm por la distribución oficial de SheetJS
+       (https://cdn.sheetjs.com, versión 0.20.x), que corrige el aviso.
+  P5 · El contenedor del backend corre como root. Recomendado: usuario sin
+       privilegios en backend/docker/Dockerfile (probar el despliegue en Render).
+  P6 · /admin/ de Django está en la ruta por defecto. Puede moverse a una ruta
+       no predecible o restringirse por IP.
+  P7 · Segundo factor (2FA) y "dispositivo fijo": se evaluaron y se decidió no
+       usarlos en esta clínica (decisión del equipo).
+===============================================================================

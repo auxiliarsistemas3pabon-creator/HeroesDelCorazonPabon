@@ -7,7 +7,6 @@ from rest_framework.test import APITestCase
 
 from users.models import User
 
-from ..models import Evaluation
 from .helpers import create_user
 
 EVALUATIONS = "/api/v1/questions/evaluations/"
@@ -48,9 +47,15 @@ class BossParticipatesTests(APITestCase):
         # Como administrador ve también el formulario sin programar; como participante solo lo abierto de su área,
         # con su cupo y sin el avance (que es información de administración).
         self.assertIn(self.form_id, manager_ids)
-        self.assertEqual([item["id"] for item in participant], [self.program_id])
-        self.assertEqual(participant[0]["remaining"], 1)
-        self.assertNotIn("pending_evaluators", participant[0])
+        participant_ids = [item["id"] for item in participant]
+        self.assertIn(self.program_id, participant_ids)
+        self.assertNotIn(self.form_id, participant_ids)
+        # Es exactamente lo que ve un colaborador de la misma área.
+        self.client.force_authenticate(self.ana)
+        self.assertEqual(participant_ids, [item["id"] for item in self.client.get(EVALUATIONS).data])
+        program = next(item for item in participant if item["id"] == self.program_id)
+        self.assertEqual(program["remaining"], 1)
+        self.assertNotIn("pending_evaluators", program)
 
     def test_superadmin_never_gets_the_participant_view(self):
         self.client.force_authenticate(self.admin)

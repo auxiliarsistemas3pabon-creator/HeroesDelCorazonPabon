@@ -251,13 +251,21 @@ describe('App.jsx - Rutas, autenticación y permisos', () => {
     expect(window.location.pathname).toBe('/evaluations')
   })
 
-  it.each(['boss', 'superadmin'])('debe sacar al rol %s de /evaluations y llevarlo al Dashboard', async (role) => {
-    asRole(role)
+  it('debe sacar al superadmin de /evaluations y llevarlo al Dashboard (no participa en evaluaciones)', async () => {
+    asRole('superadmin')
     renderApp('/evaluations')
 
     expect(await screen.findByText('DashboardPage')).toBeInTheDocument()
     expect(screen.queryByText('EvaluationPage')).not.toBeInTheDocument()
     expect(window.location.pathname).toBe('/dashboard')
+  })
+
+  it.each(['/evaluations', '/self-evaluation'])('el coordinador (boss) también evalúa: puede abrir %s', async (path) => {
+    asRole('boss')
+    renderApp(path)
+
+    expect(await screen.findByText('EvaluationPage')).toBeInTheDocument()
+    expect(window.location.pathname).toBe(path)
   })
 
   it('debe sacar /index.html escrito a mano al inicio del rol', async () => {

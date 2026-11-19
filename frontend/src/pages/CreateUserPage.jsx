@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
-import { Eye, EyeOff, UserPlus } from 'lucide-react'
+import { UserPlus } from 'lucide-react'
 import { AutocompleteSelect } from '../components/ui/AutocompleteSelect'
 import { Button } from '../components/ui/Button'
 import { Card } from '../components/ui/Card'
@@ -12,7 +12,7 @@ const ROLES = [
   { value: 'boss', label: 'Coordinador (también evalúa y es evaluado)' },
   { value: 'superadmin', label: 'Superadministrador' },
 ]
-const EMPTY = { username: '', first_name: '', last_name: '', area: '', position: '', role: 'collaborator', password: '', confirmation: '' }
+const EMPTY = { username: '', first_name: '', last_name: '', area: '', position: '', role: 'collaborator' }
 
 // Crear usuario (solo superadmin).
 // POST /users/register/ crea siempre un colaborador: por seguridad ese endpoint no acepta el rol (ver users/tests.py).
@@ -20,7 +20,6 @@ const EMPTY = { username: '', first_name: '', last_name: '', area: '', position:
 export function CreateUserPage() {
   const [form, setForm] = useState(EMPTY)
   const [areas, setAreas] = useState([])
-  const [showPassword, setShowPassword] = useState(false)
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
   const [notice, setNotice] = useState('')
@@ -35,15 +34,14 @@ export function CreateUserPage() {
   async function submit(event) {
     event.preventDefault()
     setError(''); setNotice('')
-    if (form.password !== form.confirmation) { setError('Las contraseñas no coinciden.'); return }
     setSaving(true)
     let created = null
     try {
-      const { username, first_name, last_name, area, position, password, role } = form
-      created = await api('/users/register/', { method: 'POST', body: { username, first_name, last_name, area, position, password } })
+      const { username, first_name, last_name, area, position, role } = form
+      created = await api('/users/register/', { method: 'POST', body: { username, first_name, last_name, area, position } })
       if (role !== 'collaborator') await api(`/users/admin/${created.id}/`, { method: 'PATCH', body: { role } })
       const roleLabel = ROLES.find((item) => item.value === role).label
-      setNotice(`Usuario ${created.username} creado como ${roleLabel}. Ya puede iniciar sesión con su documento y la contraseña asignada.`)
+      setNotice(`Usuario ${created.username} creado como ${roleLabel}. Inicia sesión con su documento y la contraseña inicial; en su primer ingreso deberá cambiarla.`)
       setForm(EMPTY)
       if (form.area && !areas.includes(form.area)) setAreas((current) => [...current, form.area].sort())
     } catch (e) {
@@ -62,7 +60,7 @@ export function CreateUserPage() {
       <div>
         <h1 className={PAGE_TITLE}>Crear usuario</h1>
         <p className={PAGE_SUBTITLE}>
-          Registra una cuenta nueva. Para cambiar el rol, inhabilitar o restablecer la contraseña de cuentas existentes usa{' '}
+          Registra una cuenta nueva con la contraseña inicial: la persona deberá cambiarla en su primer ingreso. Para cambiar el rol, inhabilitar o restablecer la contraseña de cuentas existentes usa{' '}
           <Link to="/users" className="font-medium text-primary hover:underline">Administrar usuarios</Link>.
         </p>
       </div>
@@ -102,25 +100,6 @@ export function CreateUserPage() {
           <label className={LABEL}>
             Cargo
             <input className={FIELD} name="position" autoComplete="off" required value={form.position} onChange={setInput('position')} placeholder="Ej. Enfermera profesional" />
-          </label>
-          <label className={LABEL}>
-            Contraseña
-            <div className="relative">
-              <input className={`${FIELD} pr-10`} name="password" type={showPassword ? 'text' : 'password'} autoComplete="new-password" minLength={8} required value={form.password} onChange={setInput('password')} />
-              <button
-                type="button"
-                className="absolute inset-y-0 right-0 flex items-center px-3 text-app-muted hover:text-app"
-                aria-label={showPassword ? 'Ocultar contraseña' : 'Mostrar contraseña'}
-                onClick={() => setShowPassword((current) => !current)}
-              >
-                {showPassword ? <EyeOff size={16} aria-hidden="true" /> : <Eye size={16} aria-hidden="true" />}
-              </button>
-            </div>
-            <span className="text-xs font-normal text-app-muted">Mínimo 8 caracteres; no puede ser solo números ni muy común.</span>
-          </label>
-          <label className={LABEL}>
-            Confirmar contraseña
-            <input className={FIELD} name="confirmation" type={showPassword ? 'text' : 'password'} autoComplete="new-password" minLength={8} required value={form.confirmation} onChange={setInput('confirmation')} />
           </label>
           <div className="flex justify-end gap-2 sm:col-span-2">
             <Button type="button" variant="secondary" disabled={saving} onClick={() => { setForm(EMPTY); setError(''); setNotice('') }}>

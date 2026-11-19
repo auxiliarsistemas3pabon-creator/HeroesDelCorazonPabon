@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react'
-import { ChevronDown, ChevronUp, Download, Eye } from 'lucide-react'
+import { ChevronDown, ChevronUp, Download, Eye, FilterX } from 'lucide-react'
 import * as XLSX from 'xlsx'
 import { AutocompleteSelect } from '../components/ui/AutocompleteSelect'
 import { Button } from '../components/ui/Button'
@@ -80,6 +80,8 @@ export function ResultsPage() {
   const submissionsUpdatedAt = realtimeEvent?.type === 'questions.submitted' ? realtimeEvent.sent_at : null
   const [evaluations, setEvaluations] = useState(null)
   const [evaluation, setEvaluation] = useState('')
+  // La que eligió el backend por defecto para el tipo actual: sirve para saber si hay filtros que limpiar.
+  const [defaultEvaluation, setDefaultEvaluation] = useState('')
   // Por defecto se muestran las programaciones grupales.
   const [kind, setKind] = useState('group')
   const [area, setArea] = useState('')
@@ -116,11 +118,27 @@ export function ResultsPage() {
         if (ignore) return
         setError(null)
         setData(result)
-        if (!evaluation && result.evaluation) setEvaluation(String(result.evaluation.id))
+        if (!evaluation && result.evaluation) {
+          setEvaluation(String(result.evaluation.id))
+          setDefaultEvaluation(String(result.evaluation.id))
+        }
       })
       .catch((e) => { if (!ignore) setError(errorMessage(e)) })
     return () => { ignore = true }
   }, [kind, evaluation, dates, submissionsUpdatedAt])
+
+  const hasFilters = kind !== 'group' || Boolean(area || person || position || dates.from || dates.to)
+    || (evaluation !== '' && evaluation !== defaultEvaluation)
+
+  // Vuelve al estado inicial: grupales, la evaluación por defecto (la elige el backend), sin área/persona/cargo ni fechas.
+  // El orden de la tabla no es un filtro y se conserva.
+  function clearFilters() {
+    setKind('group')
+    setEvaluation(kind === 'group' ? defaultEvaluation : '')
+    setArea(''); setPerson(''); setPosition('')
+    setDates({ from: '', to: '' })
+    setPage(1)
+  }
 
   // El selector de evaluación solo lista las del tipo de programación elegido.
   const kindEvaluations = (evaluations || []).filter((item) => kindOf(item) === kind)
@@ -274,6 +292,9 @@ export function ResultsPage() {
           {/* Igual para el rango de fechas, debajo de la evaluación. */}
           <div className="flex basis-full flex-wrap items-end gap-3">
             <DateRangeFilter from={dates.from} to={dates.to} onChange={(value) => { setDates(value); setPage(1) }} />
+            <Button type="button" variant="secondary" disabled={!hasFilters} onClick={clearFilters}>
+              <FilterX size={16} aria-hidden="true" /> Limpiar filtros
+            </Button>
           </div>
         </div>
       )}

@@ -17,7 +17,13 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 
 from audit.mixins import AuditLogMixin
-from common.permissions import MANAGER_ROLES, IsBossOrSuperAdmin, acts_as_manager, owned_by
+from common.permissions import (
+    MANAGER_ROLES,
+    IsBossOrSuperAdmin,
+    acts_as_manager,
+    owned_by,
+)
+from common.uploads import UploadRejected, validate_upload
 from users.areas import is_removed_area
 from users.models import User
 
@@ -686,10 +692,11 @@ class EvaluationImportView(AuditLogMixin, APIView):
         if file is None:
             return _bad("file", _("Attach an Excel (.xlsx) or CSV file."))
         try:
+            validate_upload(file, allowed=(".xlsx", ".csv"))
             table = read_table(file, file.name)
             with transaction.atomic():
                 result = import_evaluations(table, created_by=request.user)
-        except AnswersFileError as exc:
+        except (AnswersFileError, UploadRejected) as exc:
             return Response({"detail": str(exc)}, status=status.HTTP_400_BAD_REQUEST)
         return Response(result)
 
@@ -711,8 +718,9 @@ class AnswersImportView(AuditLogMixin, APIView):
             if default_evaluation is None:
                 return _bad("evaluation", _("Choose an evaluation."))
         try:
+            validate_upload(file, allowed=(".xlsx", ".csv"))
             table = read_table(file, file.name)
             result = import_answers(table, default_evaluation)
-        except AnswersFileError as exc:
+        except (AnswersFileError, UploadRejected) as exc:
             return Response({"detail": str(exc)}, status=status.HTTP_400_BAD_REQUEST)
         return Response(result)

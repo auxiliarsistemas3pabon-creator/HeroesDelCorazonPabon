@@ -69,7 +69,7 @@ def client_ip(request) -> str:
 
 
 def log_unauthorized(request, reason: str, **extra):
-    """Escribe en el log del servidor (consola/stdout) el intento no autorizado."""
+    """Escribe en el log del servidor (consola/stdout) el intento no autorizado y lo deja en la auditoría (capa 23)."""
     security_logger.warning(
         "%s | reason=%s ip=%s path=%s %s",
         CONSOLE_MESSAGE.upper(),
@@ -78,6 +78,28 @@ def log_unauthorized(request, reason: str, **extra):
         request.path,
         " ".join(f"{k}={v}" for k, v in extra.items()),
     )
+    from audit.logging import record_event
+
+    record_event(action=f"security.{reason}", outcome="blocked", request=request, status_code=None,
+                 metadata={k: str(v)[:100] for k, v in extra.items()} or None)
+
+
+class NoStoreApiMiddleware:
+    """Capa 22: las respuestas de /api/ (datos del personal y sus evaluaciones) no se guardan en ninguna caché.
+
+    En un computador compartido de la clínica, el botón "atrás" o la caché del navegador mostrarían datos de la
+    sesión anterior aunque ya se haya cerrado. `no-store` lo impide; también para proxies intermedios.
+    """
+
+    def __init__(self, get_response):
+        self.get_response = get_response
+
+    def __call__(self, request):
+        response = self.get_response(request)
+        if request.path.startswith("/api/"):
+            response["Cache-Control"] = "no-store"
+            response["Pragma"] = "no-cache"
+        return response
 
 
 class MaliciousInputMiddleware:

@@ -126,7 +126,8 @@ export function AuthProvider({ children }) {
 
   return (
     <AuthContext.Provider
-      value={{ user, loading, login, logout, realtimeStatus, realtimeEvent, realtimeNotice }}
+      // updateUser: reemplaza el perfil de sesión (p. ej. tras cambiar la clave, que levanta password_change_required).
+      value={{ user, loading, login, logout, updateUser: setUser, realtimeStatus, realtimeEvent, realtimeNotice }}
     >
       {children}
     </AuthContext.Provider>

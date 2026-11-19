@@ -1,0 +1,43 @@
+name: Frontend CI
+
+# Pruebas del frontend y escaneo de dependencias (capa 25) en cada push/PR que toque frontend/.
+on:
+  push:
+    branches: [ "main" ]
+    paths:
+      - "frontend/**"
+      - ".github/workflows/frontend-ci.yml"
+  pull_request:
+    branches: [ "main" ]
+    paths:
+      - "frontend/**"
+      - ".github/workflows/frontend-ci.yml"
+
+defaults:
+  run:
+    working-directory: frontend
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v5
+        with:
+          node-version: "22"
+          cache: "npm"
+          cache-dependency-path: frontend/package-lock.json
+      - run: npm ci
+      - run: npx vitest run
+
+  # Capa 25: dependencias que llegan al navegador (--omit=dev). Falla con severidad crítica.
+  # "xlsx" (SheetJS) tiene un aviso alto sin arreglo en npm que solo afecta a LEER archivos; la app solo los
+  # genera (Excel de resultados y plantilla). Ver reportes_pruebas_QA/PRUEBAS_MANUALES_SEGURIDAD.txt, capa 25.
+  dependency-audit:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v5
+        with:
+          node-version: "22"
+      - run: npm audit --omit=dev --audit-level=critical

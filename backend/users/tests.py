@@ -1,4 +1,5 @@
 
+from django.conf import settings
 from rest_framework.test import APITestCase
 
 from common.testing import random_digits, random_password, username_for
@@ -163,22 +164,38 @@ class StaffImportTests(APITestCase):
         self.assertEqual(len(r.data["errors"]), 1)
         self.assertIn("Fila 7", r.data["errors"][0])  # the row number as Excel shows it
 
-        credentials = r.data["initial_credentials"]
-        self.assertEqual({item["username"] for item in credentials}, {str(d2), str(d3)})
-        self.assertEqual(len({item["password"] for item in credentials}), 2)
+        # Ya no se devuelven claves: todos reciben la clave inicial y deben cambiarla al ingresar.
+        self.assertNotIn("initial_credentials", r.data)
         ana = User.objects.get(username=str(d2))
         self.assertEqual((ana.first_name, ana.last_name, ana.area, ana.position, ana.role), ("Ana María", "Pérez", "Sistemas", "Auxiliar", "collaborator"))
-        ana_password = next(item["password"] for item in credentials if item["username"] == str(d2))
-        self.assertNotEqual(ana_password, str(d2))
-        self.assertTrue(ana.check_password(ana_password))
-        self.assertFalse(ana.password_change_required)
+        self.assertTrue(ana.check_password(settings.DEFAULT_USER_PASSWORD))
+        self.assertTrue(ana.password_change_required)
         self.assertIsNone(ana.email)
-        self.assertEqual(User.objects.get(username=str(d1)).first_name, "Ya")  # the existing user is untouched
+        existing = User.objects.get(username=str(d1))
+        self.assertEqual(existing.first_name, "Ya")  # the existing user is untouched
+        self.assertFalse(existing.check_password(settings.DEFAULT_USER_PASSWORD))  # ni su clave
         self.assertFalse(User.objects.filter(username=str(d4)).exists())
 
         again = self.upload([(d2, "Ana María", "Pérez", "Sistemas", "Auxiliar")])
         self.assertEqual((again.data["created"], again.data["skipped"]), (0, 1))
-        self.assertEqual(again.data["initial_credentials"], [])
+
+    def test_role_column_is_optional_and_validated(self):
+        header = ("Número de documento", "Nombres", "Apellidos", "Área", "Cargo", "Rol")
+        base = int(random_digits(7)) + 1_000_000
+        r = self.upload([
+            (base + 1, "Colaboradora", "Uno", "Sistemas", "Auxiliar", "Colaborador"),
+            (base + 2, "Coordinadora", "Dos", "Sistemas", "Jefe", "COORDINADOR"),
+            (base + 3, "Sin", "Rol", "Sistemas", "Auxiliar", ""),
+            (base + 4, "Mal", "Rol", "Sistemas", "Auxiliar", "Gerente"),
+            (base + 5, "Super", "Admin", "Sistemas", "TI", "Superadministrador"),
+        ], header=header)
+        self.assertEqual(r.data["created"], 3)
+        roles = dict(User.objects.filter(username__in=[str(base + n) for n in (1, 2, 3)]).values_list("username", "role"))
+        self.assertEqual(roles, {str(base + 1): "collaborator", str(base + 2): "boss", str(base + 3): "collaborator"})
+        self.assertEqual(len(r.data["errors"]), 2)
+        self.assertIn("Gerente", r.data["errors"][0])
+        self.assertIn("superadministradores", r.data["errors"][1])
+        self.assertFalse(User.objects.filter(username__in=[str(base + 4), str(base + 5)]).exists())
 
     def test_names_in_one_column_and_header_variants(self):
         r = self.upload([(random_digits(8), "Juan Pérez", "Sistemas", "Auxiliar")], header=("Cédula", "Nombres", "AREA", "cargo"))

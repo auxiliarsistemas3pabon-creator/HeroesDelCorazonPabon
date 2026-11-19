@@ -26,6 +26,9 @@ if env_file.exists():
 # Core Django
 # El valor por defecto es solo para dev; prod.py rechaza arrancar con el.
 SECRET_KEY = os.getenv("DJANGO_SECRET_KEY", default="insecure-default-change-me")
+# Clave inicial de las cuentas nuevas (Cargar personal y Crear usuario). Es conocida por todos, así que la cuenta
+# queda con password_change_required y no puede usar la app hasta cambiarla (ver CookieJWTAuthentication).
+DEFAULT_USER_PASSWORD = os.getenv("DEFAULT_USER_PASSWORD", default="Pabon2026*")
 DEBUG = env("DJANGO_DEBUG")
 ALLOWED_HOSTS = env("DJANGO_ALLOWED_HOSTS")
 
@@ -54,6 +57,7 @@ THIRD_PARTY_APPS = [
 LOCAL_APPS: list[str] = [
     "users",
     "questions",
+    "audit",
 ]
 
 AUTH_USER_MODEL = "users.User"
@@ -64,6 +68,7 @@ INSTALLED_APPS = ["daphne", "channels"] + DJANGO_APPS + THIRD_PARTY_APPS + LOCAL
 MIDDLEWARE = [
     'corsheaders.middleware.CorsMiddleware',
     'django.middleware.security.SecurityMiddleware',
+    'common.security.NoStoreApiMiddleware',
     'common.security.MaliciousInputMiddleware',
     'whitenoise.middleware.WhiteNoiseMiddleware',
     'django.contrib.sessions.middleware.SessionMiddleware',
@@ -179,6 +184,11 @@ USE_I18N = True
 USE_TZ = True
 
 # STATIC / MEDIA
+# Capa 24: tamaño máximo de un archivo de carga (personal, evaluaciones, respuestas). Ver common/uploads.py.
+UPLOAD_MAX_BYTES = env.int("UPLOAD_MAX_MB", default=5) * 1024 * 1024
+# Cuerpos que no son archivo (JSON): Django rechaza los mayores con 400 antes de leerlos.
+DATA_UPLOAD_MAX_MEMORY_SIZE = 2 * 1024 * 1024
+
 STATIC_URL = '/static/'
 STATIC_ROOT = BASE_DIR / 'staticfiles'
 STATICFILES_DIRS = [BASE_DIR / 'static']

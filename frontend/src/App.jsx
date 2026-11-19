@@ -14,6 +14,7 @@ const FormCreatePage = lazy(() => import('./pages/FormCreatePage').then((module)
 const FormProgramPage = lazy(() => import('./pages/FormProgramPage').then((module) => ({ default: module.FormProgramPage })))
 const ResultsPage = lazy(() => import('./pages/ResultsPage').then((module) => ({ default: module.ResultsPage })))
 const StaffImportPage = lazy(() => import('./pages/StaffImportPage').then((module) => ({ default: module.StaffImportPage })))
+const ChangePasswordPage = lazy(() => import('./pages/ChangePasswordPage').then((module) => ({ default: module.ChangePasswordPage })))
 const CreateUserPage = lazy(() => import('./pages/CreateUserPage').then((module) => ({ default: module.CreateUserPage })))
 const UsersAdminPage = lazy(() => import('./pages/UsersAdminPage').then((module) => ({ default: module.UsersAdminPage })))
 
@@ -96,6 +97,8 @@ function App() {
             <Route path="/staff" element={<RoleRoute roles={SUPERADMIN}><StaffImportPage /></RoleRoute>} />
             <Route path="/users" element={<RoleRoute roles={SUPERADMIN}><UsersAdminPage /></RoleRoute>} />
             <Route path="/users/create" element={<RoleRoute roles={SUPERADMIN}><CreateUserPage /></RoleRoute>} />
+            {/* Cualquier usuario con sesión cambia su propia contraseña. */}
+            <Route path="/account/password" element={<ChangePasswordPage />} />
             <Route path="*" element={<HomeRedirect />} />
           </Route>
         </Routes>

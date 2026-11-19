@@ -21,6 +21,7 @@ from rest_framework_simplejwt.tokens import RefreshToken
 from audit.mixins import AuditLogMixin
 from common.permissions import IsBossOrSuperAdmin, IsSuperAdmin
 from common.security import UNAUTHORIZED_MESSAGE, log_unauthorized, looks_malicious
+from common.uploads import UploadRejected, validate_upload
 
 from .areas import is_removed_area
 from .devices import DEVICE_CLAIM, find_device, register_device, set_device_cookie
@@ -32,6 +33,7 @@ from .serializers import (
     RegisterSerializer,
     UserSerializer,
 )
+from .sessions import revoke_all_sessions
 from .staff_import import StaffFileError, import_staff
 
 # La cookie de refresh solo viaja a /api/v1/auth/*, reduciendo su exposicion al resto de la API.
@@ -219,6 +221,34 @@ class MeView(AuditLogMixin, APIView):
         return Response(AuthenticatedUserSerializer(request.user).data)
 
 
+class PasswordChangeView(AuditLogMixin, APIView):
+    """POST /auth/password-change/: el usuario cambia su propia clave (pide la actual).
+
+    Es la única ruta útil (además de me/logout) para una cuenta con la clave inicial: al cambiarla se levanta
+    password_change_required y la cuenta ya puede usar la app (ver common.authentication).
+    """
+
+    throttle_classes = [ScopedRateThrottle]
+    throttle_scope = "login"
+
+    def post(self, request):
+        serializer = PasswordChangeSerializer(data=request.data, context={"request": request, "target_user": request.user})
+        serializer.is_valid(raise_exception=True)
+        user = request.user
+        user.set_password(serializer.validated_data["new_password"])
+        user.password_change_required = False
+        user.save(update_fields=["password", "password_change_required"])
+        # Capa 21: se cierran las sesiones de los demás equipos; este conserva la suya con tokens nuevos.
+        current_device = request.auth.get(DEVICE_CLAIM) if request.auth is not None else None
+        revoke_all_sessions(user, keep_device_id=current_device)
+        response = Response(AuthenticatedUserSerializer(user).data)
+        refresh = RefreshToken.for_user(user)
+        if current_device is not None:
+            refresh[DEVICE_CLAIM] = current_device
+        _set_auth_cookies(response, refresh)
+        return response
+
+
 class RegisterView(AuditLogMixin, generics.CreateAPIView):
     """POST /users/register/: permite que un superadmin cree una cuenta colaboradora."""
 
@@ -264,8 +294,11 @@ class AdminUsersView(AuditLogMixin, APIView):
             serializer = PasswordChangeSerializer(data={"new_password": request.data["new_password"]}, context={"target_user": user})
             serializer.is_valid(raise_exception=True)
             user.set_password(serializer.validated_data["new_password"])
-            user.password_change_required = False
+            # Restablecer a la clave inicial (conocida por todos) obliga a cambiarla otra vez; otra clave, no.
+            user.password_change_required = serializer.validated_data["new_password"] == settings.DEFAULT_USER_PASSWORD
             reset_login_attempts(username=user.username)
+            # Capa 21: quien tuviera una sesión abierta con la clave anterior queda fuera.
+            revoke_all_sessions(user)
         if "is_active" in request.data:
             user.is_active = active
         user.save()
@@ -286,9 +319,10 @@ class StaffImportView(AuditLogMixin, APIView):
         if file is None:
             return Response({"detail": _("Attach an Excel file (.xlsx).")}, status=status.HTTP_400_BAD_REQUEST)
         try:
+            validate_upload(file, allowed=(".xlsx",))
             with transaction.atomic():
                 result = import_staff(file)
-        except StaffFileError as exc:
+        except (StaffFileError, UploadRejected) as exc:
             return Response({"detail": str(exc)}, status=status.HTTP_400_BAD_REQUEST)
         return Response(result)
 

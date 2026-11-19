@@ -17,8 +17,6 @@ function fillForm() {
   fill('Apellidos', 'Ortiz')
   fill('Cargo', 'Enfermera profesional')
   fireEvent.change(screen.getByRole('combobox', { name: /Área/ }), { target: { value: 'Enfermería' } })
-  fireEvent.change(screen.getByLabelText(/^Contraseña/), { target: { value: 'Clave-segura-2026' } })
-  fill('Confirmar contraseña', 'Clave-segura-2026')
 }
 
 describe('CreateUserPage', () => {
@@ -31,14 +29,16 @@ describe('CreateUserPage', () => {
     })
   })
 
-  it('crea un colaborador sin enviar el rol al registro', async () => {
+  it('crea un colaborador con la contraseña inicial (no se escribe ni se envía contraseña)', async () => {
     render(<MemoryRouter><CreateUserPage /></MemoryRouter>)
+    expect(screen.queryByLabelText(/Contraseña/)).not.toBeInTheDocument()
     fillForm()
     fireEvent.click(screen.getByRole('button', { name: /Crear usuario/ }))
     expect(await screen.findByRole('status')).toHaveTextContent('creado como Colaborador')
+    expect(screen.getByRole('status')).toHaveTextContent('deberá cambiarla')
     const [, options] = mockApi.mock.calls.find(([path]) => path === '/users/register/')
     expect(options.body).toEqual({
-      username: '1098765432', first_name: 'Daniela', last_name: 'Ortiz', area: 'Enfermería', position: 'Enfermera profesional', password: 'Clave-segura-2026',
+      username: '1098765432', first_name: 'Daniela', last_name: 'Ortiz', area: 'Enfermería', position: 'Enfermera profesional',
     })
     expect(mockApi.mock.calls.some(([path]) => path.startsWith('/users/admin/'))).toBe(false)
   })
@@ -51,14 +51,5 @@ describe('CreateUserPage', () => {
     fireEvent.click(screen.getByRole('button', { name: /Crear usuario/ }))
     expect(await screen.findByRole('status')).toHaveTextContent('creado como Coordinador')
     expect(mockApi).toHaveBeenCalledWith('/users/admin/7/', { method: 'PATCH', body: { role: 'boss' } })
-  })
-
-  it('no envía nada si las contraseñas no coinciden', () => {
-    render(<MemoryRouter><CreateUserPage /></MemoryRouter>)
-    fillForm()
-    fill('Confirmar contraseña', 'otra-clave-123')
-    fireEvent.click(screen.getByRole('button', { name: /Crear usuario/ }))
-    expect(screen.getByRole('alert')).toHaveTextContent('no coinciden')
-    expect(mockApi.mock.calls.some(([path]) => path === '/users/register/')).toBe(false)
   })
 })

@@ -70,6 +70,11 @@ Variables importantes del backend:
 - `FRONTEND_BASE_URL`, `CORS_ALLOWED_ORIGINS`, `CSRF_TRUSTED_ORIGINS`: origen del sitio y política del navegador.
 - `EMAIL_HOST`, `EMAIL_PORT`, `EMAIL_USE_TLS`, `EMAIL_HOST_USER`, `EMAIL_HOST_PASSWORD`, `DEFAULT_FROM_EMAIL`: salida de correos. Desarrollo usa Mailpit.
 - `AUTH_COOKIE_SAMESITE` y `AUTH_COOKIE_SECURE`: configuración de cookies; producción fuerza cookies seguras.
+- `DEFAULT_USER_PASSWORD`: contraseña inicial de las cuentas nuevas (por defecto `Pabon2026*`); siempre con cambio obligatorio.
+- `UPLOAD_MAX_MB`: tamaño máximo de los archivos de carga (por defecto 5).
+- `AXES_FAILURE_LIMIT`, `AXES_COOLOFF_TIME_HOURS`, `THROTTLE_RATE_*`, `JWT_ACCESS_TOKEN_LIFETIME_MINUTES`, `JWT_REFRESH_TOKEN_LIFETIME_DAYS`: límites de seguridad (ver [Seguridad](#seguridad-25-capas)).
+
+Variable del frontend: `VITE_IDLE_TIMEOUT_MINUTES` (por defecto 15), minutos sin actividad antes de cerrar la sesión.
 
 No versionar archivos `.env`, claves, credenciales, copias de bases de datos ni archivos de importación con datos reales. Antes de compartir datos de ejemplo, comprobar que sean sintéticos.
 
@@ -86,10 +91,10 @@ Local mantiene el backend Docker: `frontend/.env` usa `VITE_API_URL=http://local
 - `backend/config/settings/base.py`: configuración común, selección de PostgreSQL o SQL Server, DRF, JWT, seguridad y zona horaria `America/Bogota`.
 - `backend/config/settings/dev.py` y `prod.py`: ajustes por ambiente.
 - `backend/config/urls.py`: prefijo `/api/v1/` y administración Django.
-- `backend/users/`: usuarios, autenticación, roles, recuperación de contraseñas y carga de personal; ver [Módulo users](#modulo-users).
+- `backend/users/`: usuarios, autenticación, roles, cambio de contraseña, revocación de sesiones y carga de personal; ver [Módulo users](#modulo-users).
 - `backend/questions/models.py`: `Evaluation` es un formulario; cada formulario contiene `Category` y `Criterion`. `Question` guarda las calificaciones asociadas a colaborador, persona evaluada y formulario.
-- `backend/common/`: autenticación JWT, validación CSRF, permisos reutilizables y paginación; ver [Módulo common](#modulo-common).
-- `backend/audit/` y `backend/realtime/`: eventos de auditoría estructurados y notificaciones WebSocket; no definen modelos ni migraciones.
+- `backend/common/`: autenticación JWT, validación CSRF, permisos reutilizables, middlewares de seguridad, validación de archivos y paginación; ver [Módulo common](#modulo-common).
+- `backend/audit/`: auditoría en log JSON y en la tabla de solo inserción `AuditEvent`. `backend/realtime/`: notificaciones WebSocket (sin modelos).
 - `backend/*/migrations/`: historial versionado del esquema. Cambios a modelos deben ir acompañados de migraciones.
 
 La API está montada bajo `/api/v1/`. Entre las rutas principales están:
@@ -97,7 +102,7 @@ La API está montada bajo `/api/v1/`. Entre las rutas principales están:
 | Ruta | Uso |
 | --- | --- |
 | `/auth/login/`, `/auth/logout/`, `/auth/me/`, `/auth/refresh/` | Sesión y perfil autenticado. |
-| `/auth/password-change/`, `/auth/password-reset/` | Cambio y recuperación de contraseña. |
+| `/auth/password-change/` | Cambio de la propia contraseña (obligatorio con la contraseña inicial). |
 | `/users/import/`, `/users/collaborators/`, `/users/areas/` | Carga y consulta de personal. |
 | `/questions/import/`, `/questions/answers/import/` | Carga de formularios o respuestas. |
 | `/questions/evaluations/`, `/questions/categories/`, `/questions/form/` | Formularios y configuración de preguntas. |
@@ -108,20 +113,21 @@ El detalle de métodos, permisos y formatos de respuesta está en las vistas, se
 
 ## Módulo users
 
-El módulo Django `backend/users/` gestiona las cuentas, el inicio y cierre de sesión, el perfil autenticado, los permisos basados en roles, el cambio y recuperación de contraseña, y las importaciones de personal. Sus rutas se registran en `users/urls.py` bajo el prefijo `/api/v1/`.
+El módulo Django `backend/users/` gestiona las cuentas, el inicio y cierre de sesión, el perfil autenticado, los permisos basados en roles, el cambio de contraseña (con revocación de sesiones) y las importaciones de personal. Sus rutas se registran en `users/urls.py` bajo el prefijo `/api/v1/`.
 
 ### Modelo y roles
 
 El modelo `User` extiende el usuario de Django. `username` identifica la cuenta y normalmente contiene el número de documento; `email` es opcional, único y limitado al dominio institucional `demo.com`. Los campos adicionales incluyen nombres, apellidos, área, cargo (`position`) y `password_change_required`.
 
-| Rol | Responsabilidad |
-| --- | --- |
-| `superadmin` | Administración global y carga de personal. |
-| `boss` | Consulta y programación de evaluaciones para su área. |
-| `collaborator` | Cuenta de acceso que diligencia evaluaciones; la crea un superadmin o la importación autorizada. |
-| `personal` | Persona evaluada, sin acceso de inicio de sesión. |
+| Rol | Etiqueta en la app | Responsabilidad |
+| --- | --- | --- |
+| `superadmin` | Superadministrador | Administración global, usuarios y carga de personal. No participa en evaluaciones. |
+| `boss` | Coordinador | Crea, programa y consulta evaluaciones. Además participa como colaborador: evalúa, se autoevalúa y lo evalúan los de su área. |
+| `collaborator` | Colaborador | Evalúa a personas de su área, se autoevalúa y es evaluado. |
 
-El registro público está deshabilitado: solo un superadmin puede crear cuentas desde la API. El rol no se puede asignar desde la solicitud ni editarse desde el serializador de usuario. Las comprobaciones de permisos de API también se aplican en el backend; ocultar opciones en la interfaz no sustituye esos controles.
+`User.PARTICIPANT_ROLES = (boss, collaborator)` define quién evalúa y es evaluado; las vistas y filtros usan esa constante en lugar de listas de roles. El antiguo rol `personal` (persona evaluada sin acceso) se eliminó: la migración `users/0016_merge_personal_into_collaborator` convierte esas cuentas en colaboradores (irreversible en los datos).
+
+El registro público está deshabilitado: solo un superadmin puede crear cuentas desde la API. El rol no se puede asignar desde la solicitud de registro ni editarse desde el serializador de usuario; se asigna después con `PATCH /users/admin/<id>/`. Las comprobaciones de permisos de API también se aplican en el backend; ocultar opciones en la interfaz no sustituye esos controles.
 
 ### Rutas de la API
 
@@ -132,24 +138,23 @@ Todas las rutas siguientes se anteponen con `/api/v1/`.
 | `POST /auth/login/` | Público. Autentica con `username` y contraseña; establece cookies de sesión. |
 | `POST /auth/refresh/`, `POST /auth/logout/` | Renovación y cierre de sesión. |
 | `GET /auth/me/` | Devuelve el perfil de la sesión actual. |
-| `POST /auth/password-change/` | Usuario autenticado; exige contraseña actual al cambiar la propia. |
-| `POST /auth/password-reset/` | Público. Solicita un enlace de recuperación por correo; la respuesta no revela si la cuenta existe. |
-| `POST /auth/password-reset/confirm/` | Público. Confirma la nueva contraseña con el identificador y token del correo. |
-| `POST /users/register/` | Solo superadmin. Creación administrativa de un colaborador; valida username, nombres, área y contraseña. |
+| `POST /auth/password-change/` | Usuario autenticado. Exige `current_password`; la nueva no puede ser la actual ni la contraseña inicial. Revoca las sesiones de los demás equipos y emite cookies nuevas para el actual. |
+| `POST /users/register/` | Solo superadmin. Crea un colaborador; `password` es opcional (sin ella se usa `DEFAULT_USER_PASSWORD`). La cuenta queda con `password_change_required=True`. |
+| `GET`, `PATCH /users/admin/`, `/users/admin/<id>/` | Solo superadmin. Lista cuentas; cambia rol, inhabilita o restablece contraseña (revoca todas las sesiones de la cuenta; restablecer a la contraseña inicial obliga a cambiarla). |
 | `GET /users/areas/` | Público. Lista áreas activas para sugerir durante el registro. |
-| `GET /users/collaborators/` | Usuario autenticado. Lista colaboradores y personal activo de su misma área. |
-| `GET /users/staff-candidates/`, `GET /users/evaluators/` | Jefe de área o superadmin; lista personal evaluable y evaluadores activos. |
-| `POST /users/import/` | Solo superadmin. Importa personal desde un archivo Excel `.xlsx`. |
+| `GET /users/collaborators/` | Usuario autenticado. Lista participantes activos (colaboradores y coordinadores) de su misma área. |
+| `GET /users/staff-candidates/`, `GET /users/evaluators/` | Coordinador o superadmin; lista participantes evaluables y evaluadores activos. |
+| `POST /users/import/` | Solo superadmin. Importa personal desde un archivo Excel `.xlsx` validado (ver capa 24). |
 
-Las sesiones usan cookies `httpOnly`; las cookies de autenticación y CSRF se configuran en `common` y en los ajustes de Django. Las contraseñas se validan con los validadores de Django. El módulo incluye pruebas de autenticación, protección CSRF, registro, recuperación, roles y carga en `backend/users/tests.py`.
+Las sesiones usan cookies `httpOnly`; las cookies de autenticación y CSRF se configuran en `common` y en los ajustes de Django. Las contraseñas se validan con los validadores de Django. Pruebas: `users/tests.py`, `users/test_password_change.py`, `users/test_security.py` y `users/test_security_layers.py`.
 
 ### Importación y creación de cuentas
 
-`users/staff_import.py` lee Excel `.xlsx` y reconoce encabezados en español o equivalentes, ignorando diferencias de mayúsculas, tildes y separadores. Documento, nombres, área y cargo son obligatorios; apellidos son opcionales. Los documentos ya registrados se omiten, no se actualizan, y los errores se reportan por fila.
+`users/staff_import.py` lee Excel `.xlsx` y reconoce encabezados en español o equivalentes, ignorando diferencias de mayúsculas, tildes y separadores. Documento, nombres, área y cargo son obligatorios; apellidos y **Rol** son opcionales. Rol acepta `Colaborador` o `Coordinador` (también `Jefe`); vacío = colaborador. Los superadministradores no se cargan desde Excel (se crean uno a uno en Usuarios) y un rol desconocido se reporta como error de fila. Los documentos ya registrados se omiten, no se actualizan (ni su rol ni su clave).
 
-Las cuentas nuevas de la importación se crean como `collaborator` con una contraseña temporal aleatoria y `password_change_required=True`. La respuesta incluye las credenciales iniciales una sola vez: deben entregarse al usuario por un canal seguro y no guardarse en logs, tickets ni repositorios. El cambio de contraseña es necesario antes de usar las demás funciones autenticadas. Para personas evaluadas sin acceso de inicio de sesión, usar el rol `personal` (por ejemplo, con el comando `seed_personal`); no confundirlo con las cuentas colaboradoras.
+**Contraseña inicial.** Toda cuenta nueva (carga de personal o "Crear usuario") recibe `DEFAULT_USER_PASSWORD` (por defecto `Pabon2026*`, configurable por variable de entorno) y `password_change_required=True`. Como esa contraseña la conoce todo el mundo, `common.authentication.enforce_password_change` bloquea con 403 (`password_change_required`) toda la API salvo `me`, `password-change`, `logout` y `csrf` hasta que la persona elige una propia; el frontend muestra solo la pantalla "Cambia tu contraseña". El valor nunca se incluye en el frontend. La plantilla de carga se descarga desde la pantalla; su hoja de datos va vacía y los ejemplos van en una hoja "Instrucciones" que no se lee.
 
-Para crear un colaborador manualmente, un superadmin puede usar la API protegida o `users/management/commands/create_collaborator.py`, que solicita la contraseña de forma interactiva:
+Para crear un colaborador manualmente, un superadmin puede usar "Usuarios > Crear usuario", la API protegida o `users/management/commands/create_collaborator.py`, que solicita la contraseña de forma interactiva:
 
 ```powershell
 docker compose exec backend python manage.py create_collaborator <documento> <nombres>
@@ -173,7 +178,9 @@ La aplicación `backend/questions/` administra los formularios de evaluación, s
 
 El ciclo habitual es: crear un formulario con sus categorías y criterios; programarlo como una evaluación independiente; seleccionar fecha de cierre, áreas, personal y evaluadores; los colaboradores responden el formulario disponible; finalmente, los responsables consultan entregas y resultados. Programar un formulario crea una copia independiente, sin copiar respuestas. Un formulario recién creado no aparece a los colaboradores hasta quedar programado.
 
-Los jefes (`boss`) administran los formularios que crearon y consultan los resultados permitidos para su área. Los superadministradores (`superadmin`) pueden administrar formularios globalmente. Los colaboradores (`collaborator`) solo responden evaluaciones abiertas que les correspondan y a personas activas de su misma área; el rol `personal` identifica a quienes pueden ser evaluados, no a quienes responden.
+Los coordinadores (`boss`) administran los formularios que crearon y consultan los resultados permitidos para su área. Los superadministradores (`superadmin`) pueden administrar formularios globalmente y no participan en evaluaciones. Colaboradores y coordinadores (`PARTICIPANT_ROLES`) responden evaluaciones abiertas que les correspondan, a personas activas de su misma área, y son evaluados por ellas. Cuando el coordinador entra a "Evaluar" o "Autoevaluación", el frontend envía `?participant=1` y el backend le da exactamente la vista de colaborador (`common.permissions.acts_as_manager`). Una programación sin evaluadores elegidos espera evaluaciones de todos los participantes del área.
+
+Hay dos tipos de programación (`Evaluation.kind`): **grupal** (`group`, cada participante evalúa a otros de su área) e **individual** (`self`, autoevaluación). En Resultados, el filtro "Tipo de programación" (por defecto grupal) separa ambos; en escalas cualitativas cada promedio se muestra con su resultado (p. ej. 2.8 → "Bueno"), redondeado al nivel más cercano de la escala.
 
 La calificación depende de `rating_type`: las escalas cuantitativas y descriptivas habituales van de 1 a 5, `quantitative_10` va de 1 a 10, y cumplimiento descriptivo usa 0 a 3. En esta última, 0 significa “no aplica” y se excluye de los promedios. Cada envío debe incluir exactamente una respuesta para cada criterio activo de la evaluación. El límite mensual aplica por evaluación y colaborador; reprogramar una evaluación inicia una nueva ronda. Para selección aleatoria, el sistema asigna una lista estable durante el periodo.
 
@@ -185,7 +192,7 @@ Todas las rutas de la tabla se anteponen con `/api/v1/`. Las acciones de configu
 
 | Método y ruta | Acceso y propósito |
 | --- | --- |
-| `GET /questions/evaluations/` | Usuario autenticado. Lista formularios del jefe o evaluaciones disponibles para el colaborador. `?mine=1` limita la consulta administrativa a formularios con respuestas. |
+| `GET /questions/evaluations/` | Usuario autenticado. Lista formularios del jefe o evaluaciones disponibles para el colaborador. `?mine=1` limita la consulta administrativa a formularios con respuestas; `?participant=1` da al coordinador la vista de colaborador. |
 | `POST /questions/evaluations/` | Jefe o superadmin. Crea un formulario independiente, opcionalmente con categorías y criterios. |
 | `PATCH`, `DELETE /questions/evaluations/<id>/` | Jefe o superadmin propietario. Actualiza datos/programación o elimina solo si aún no hay respuestas; si hay historial, debe cerrarse. |
 | `POST /questions/evaluations/<id>/programs/` | Jefe o superadmin propietario. Programa una copia independiente con `closes_on`, `areas`, `personal_ids`, `evaluator_ids`, `monthly_limit` y `random_selection`. |
@@ -194,13 +201,13 @@ Todas las rutas de la tabla se anteponen con `/api/v1/`. Las acciones de configu
 | `POST /questions/categories/<id>/criteria/` | Jefe o superadmin propietario. Añade un criterio a la categoría si la evaluación aún no tiene respuestas. |
 | `PATCH`, `DELETE /questions/criteria/<id>/` | Jefe o superadmin propietario. Edita, desactiva o elimina un criterio sin respuestas. |
 | `GET /questions/form/?evaluation=<id>` | Usuario autenticado. Devuelve categorías y criterios activos del formulario; `include_inactive=1` permite mostrar estructura histórica. |
-| `GET`, `POST /questions/` | Lectura autenticada: jefes/superadmins consultan respuestas; colaboradores consultan las recibidas. Solo colaboradores pueden enviar respuestas. |
-| `GET /questions/sent/` | Colaborador. Lista sus evaluaciones enviadas. |
+| `GET`, `POST /questions/` | Lectura autenticada: jefes/superadmins consultan respuestas; colaboradores consultan las recibidas. Envían respuestas colaboradores y coordinadores (no el superadmin). |
+| `GET /questions/sent/` | Colaborador o coordinador. Lista sus evaluaciones enviadas. |
 | `GET /questions/submissions/` | Jefe o superadmin. Lista entregas agrupadas; acepta filtros `evaluation` y `personal`. |
-| `GET /questions/quota/?evaluation=<id>` | Colaborador. Devuelve límite, cupo usado, personas ya evaluadas y, si aplica, la lista asignada. |
+| `GET /questions/quota/?evaluation=<id>` | Colaborador o coordinador. Devuelve límite, cupo usado, personas ya evaluadas y, si aplica, la lista asignada. |
 | `GET`, `PUT /questions/settings/` | Jefe o superadmin. Consulta o configura el límite global o uno específico con `evaluation`; el rango permitido es 1–30. |
 | `GET /questions/results/` | Usuario autenticado. Resultados propios agregados por formulario y categoría. |
-| `GET /questions/results-summary/` | Jefe o superadmin. Resumen por persona y categoría; acepta `evaluation=<id>` o `evaluation=all`. |
+| `GET /questions/results-summary/` | Jefe o superadmin. Resumen por persona y categoría; acepta `evaluation=<id>` o `evaluation=all`, y `kind=group\|self` para separar programaciones grupales e individuales. |
 | `GET /questions/category-averages/` | Jefe o superadmin. Promedios por categoría; permite filtros `evaluation`, `personal`, `area`, `position` y fechas. |
 | `GET /questions/dashboard/`, `GET /questions/stats/` | Usuario autenticado para dashboard; jefe o superadmin para estadísticas. Aceptan `date_from` y `date_to` en formato `YYYY-MM-DD`. |
 | `POST /questions/import/` | Jefe o superadmin. Importa formularios desde Excel `.xlsx` o CSV. |
@@ -229,7 +236,9 @@ El comando `python manage.py import_questions data/evaluations.xlsx` admite Exce
 
 Cuando autentica desde cookie, valida también el token CSRF (patrón cookie + encabezado/formulario esperado por Django) en las solicitudes mutantes. Este control no se ejecuta en la rama del encabezado `Authorization`, que el navegador no agrega automáticamente. El frontend debe hacer las solicitudes autenticadas con el cliente común `frontend/src/lib/api.js`, que envía cookies y CSRF.
 
-Si la cuenta tiene `password_change_required=True`, el autenticador bloquea los endpoints salvo el perfil (`me`) y el cambio de contraseña (`password-change`). Estos nombres corresponden a nombres de URL; si se renombran, actualizar la lista permitida en `CookieJWTAuthentication`. Una autenticación válida no reemplaza los permisos de la vista, que se evalúan después.
+Si la cuenta tiene `password_change_required=True`, el autenticador responde 403 (`password_change_required`) en todos los endpoints salvo los de `PASSWORD_CHANGE_ALLOWED` (`me`, `password-change`, `logout`, `csrf-token`). Son nombres de URL: si se renombran, actualizar esa lista en `common/authentication.py`. Login, refresh, logout y csrf no usan el autenticador, así que la cuenta puede entrar y salir. Una autenticación válida no reemplaza los permisos de la vista, que se evalúan después.
+
+Otras piezas de seguridad de `common/`: `security.py` (filtro de entradas maliciosas, `NoStoreApiMiddleware` y registro de intentos no autorizados) y `uploads.py` (validación de archivos subidos). Ver [Seguridad](#seguridad-25-capas).
 
 ### Permisos y pertenencia
 
@@ -238,11 +247,11 @@ Si la cuenta tiene `password_change_required=True`, el autenticador bloquea los 
 | Permiso | Acceso |
 | --- | --- |
 | `IsSuperAdmin` | Solo el rol `superadmin`. |
-| `IsCollaborator` | Solo el rol `collaborator`. |
+| `IsCollaborator` | Participantes: `collaborator` y `boss` (evaluar, autoevaluarse, cupo, enviadas). |
 | `IsBoss` | Solo el rol `boss`. |
 | `IsBossOrSuperAdmin` | `boss` o `superadmin`; no implica que el jefe pueda modificar objetos de otros jefes. |
 
-Los roles se comparan exactamente; no hay herencia implícita entre ellos. `MANAGER_ROLES` centraliza los roles que gestionan evaluaciones. `owned_by(user, field="created_by")` devuelve el filtro de pertenencia: limita al jefe a objetos propios y no agrega esa restricción al superadmin. Las vistas deben combinar el permiso de rol con este filtro cuando operen sobre recursos que tienen propietario; `owned_by` por sí solo no autentica ni autoriza una solicitud.
+Los roles se comparan exactamente; no hay herencia implícita entre ellos. `MANAGER_ROLES` centraliza los roles que gestionan evaluaciones y `acts_as_manager(request)` decide si una petición recibe la vista de administración (un coordinador con `?participant=1` recibe la de colaborador). `owned_by(user, field="created_by")` devuelve el filtro de pertenencia: limita al jefe a objetos propios y no agrega esa restricción al superadmin. Las vistas deben combinar el permiso de rol con este filtro cuando operen sobre recursos que tienen propietario; `owned_by` por sí solo no autentica ni autoriza una solicitud.
 
 ### Paginación
 
@@ -250,33 +259,35 @@ Los roles se comparan exactamente; no hay herencia implícita entre ellos. `MANA
 
 ## Módulos audit y realtime
 
-Estos módulos comparten la capa de aplicación, pero sus eventos no se escriben en PostgreSQL: no agregan tablas, migraciones ni escrituras de auditoría. La auditoría se emite como JSON a stdout para que Docker o un recolector externo la almacene según la política operativa. No hay retención automática configurada; los logs disponibles dependen del driver y la rotación del entorno.
+La auditoría se emite como JSON a stdout **y** se guarda en la tabla `audit_auditevent` (los logs de Render no se conservan). El tiempo real no usa tablas.
 
 ### Auditoría (`backend/audit/`)
 
-`AuditLogMixin` se integra en las vistas de usuarios y evaluaciones. Registra solicitudes mutantes (`POST`, `PUT`, `PATCH`, `DELETE`) con nombre de acción/endpoint, resultado HTTP, fecha UTC, IP remota e identificador/rol del usuario autenticado cuando existe. Incluye intentos rechazados para dejar constancia de errores de autorización o validación. El formato JSON se define en `audit/logging.py`.
+`AuditLogMixin` se integra en las vistas de usuarios y evaluaciones. Registra solicitudes mutantes (`POST`, `PUT`, `PATCH`, `DELETE`) con nombre de acción/endpoint, resultado HTTP, fecha, IP real del cliente (de `X-Forwarded-For` detrás de Render), navegador, y usuario/rol cuando existe. `common.security.log_unauthorized` agrega los intentos bloqueados como `security.<motivo>` con resultado `blocked` (contraseña incorrecta, entrada maliciosa, ventana privada…).
 
-No se registran cuerpos de solicitud/respuesta, contraseñas, cookies, encabezados de autorización, tokens ni respuestas de API; por ello el log no es un respaldo de los datos de negocio. La auditoría de la API tampoco debe confundirse con un historial inmutable de cambios de PostgreSQL ni cubre automáticamente modificaciones hechas fuera de esas vistas (por ejemplo, edición directa en SQL).
+El modelo `audit.AuditEvent` es de **solo inserción**: `save()` sobre un evento existente, `delete()`, `QuerySet.update()` y `QuerySet.delete()` lanzan `AppendOnlyError`, y el admin de Django lo muestra solo para consulta y filtro. Si guardar un evento falla, se registra en el log y la petición continúa (savepoint propio).
+
+No se registran cuerpos de solicitud/respuesta, contraseñas, cookies, encabezados de autorización ni tokens; por ello no es un respaldo de los datos de negocio, y no cubre modificaciones hechas fuera de la API (por ejemplo, edición directa en SQL). No hay depuración automática: definir la retención según la política de la clínica.
 
 ### Tiempo real (`backend/realtime/`)
 
-`config/asgi.py` enruta HTTP a Django y `/ws/events/` a Django Channels. El WebSocket autentica el JWT de la cookie httpOnly `access_token`, valida el origen contra `ALLOWED_HOSTS` y limita conexiones a cuentas activas de tipo `boss`, `superadmin` o `collaborator` sin cambio de contraseña pendiente. Las cuentas `personal` no abren sesión de WebSocket.
+`config/asgi.py` enruta HTTP a Django y `/ws/events/` a Django Channels. El WebSocket autentica el JWT de la cookie httpOnly `access_token`, valida el origen contra `ALLOWED_HOSTS` y limita conexiones a cuentas activas de tipo `boss`, `superadmin` o `collaborator` sin cambio de contraseña pendiente.
 
 Redis (Channels) transporta eventos entre procesos; no almacena respuestas de evaluación ni el registro de auditoría. Los mensajes solo contienen el tipo de evento y su fecha, sin nombres, puntuaciones, identificadores de personas ni otros datos de evaluación. Los canales se agrupan por rol: los responsables reciben nuevas entregas; las evaluaciones nuevas o modificadas se anuncian a ambos grupos; cambios de personal se anuncian a responsables. El cliente debe volver a consultar la API autenticada para obtener información autorizada.
 
 El frontend mantiene una conexión mientras hay sesión, reintenta con espera creciente si se interrumpe y renueva la sesión si el JWT expira. Vite reenvía `/ws/` al backend en desarrollo. En producción, el proxy HTTPS debe permitir el upgrade de WebSocket y enrutar `/ws/` al servicio ASGI Daphne, igual que `/api/`.
 
-Ambos archivos Compose incluyen Redis sin publicar su puerto al host. Producción usa Daphne para servir HTTP y WebSocket desde ASGI. `CHANNELS_REDIS_URL` configura la capa de canales (por defecto, la base Redis 3); no ejecutar migraciones para habilitar estas funciones, ya que no usan modelos de base de datos.
+Ambos archivos Compose incluyen Redis sin publicar su puerto al host. Producción usa Daphne para servir HTTP y WebSocket desde ASGI. `CHANNELS_REDIS_URL` configura la capa de canales (por defecto, la base Redis 3); el tiempo real no usa modelos de base de datos.
 
 ## Cargas de archivos
 
 ### Personal
 
-La pantalla de staff acepta Excel `.xlsx`. El importador está en `backend/users/staff_import.py`. El encabezado debe incluir documento, nombres, área y cargo; apellidos son opcionales. Los documentos duplicados se omiten, no se actualizan. La contraseña inicial se establece con el número de documento, por lo que las cuentas deben cambiarla según las políticas operativas del entorno.
+La pantalla "Cargar datos" acepta Excel `.xlsx` (máximo `UPLOAD_MAX_MB`, 5 MB) y ofrece "Descargar plantilla". El importador está en `backend/users/staff_import.py`. El encabezado debe incluir documento, nombres, área y cargo; apellidos y rol son opcionales. Los documentos duplicados se omiten, no se actualizan. Las cuentas nuevas reciben la contraseña inicial y deben cambiarla en su primer ingreso (ver [Importación y creación de cuentas](#importación-y-creación-de-cuentas)).
 
 ### Formularios de evaluación
 
-La pantalla de staff acepta Excel `.xlsx` o CSV. Una fila representa una pregunta e incluye las columnas `evaluation`, `category` y `question` (también se aceptan encabezados equivalentes en español). Se repiten evaluación y categoría para cada pregunta correspondiente. Las evaluaciones que ya existen se omiten; las nuevas se crean junto con categorías y preguntas.
+La pantalla de staff acepta Excel `.xlsx` o CSV (validados por `common/uploads.py`: extensión, tamaño y contenido real). Una fila representa una pregunta e incluye las columnas `evaluation`, `category` y `question` (también se aceptan encabezados equivalentes en español). Se repiten evaluación y categoría para cada pregunta correspondiente. Las evaluaciones que ya existen se omiten; las nuevas se crean junto con categorías y preguntas.
 
 También se pueden crear formularios desde la consola del backend:
 
@@ -288,7 +299,7 @@ El comando admite `.xlsx` y `.csv`. El archivo debe estar en el contenedor (por 
 
 ## Frontend
 
-El frontend es una SPA React con rutas en `frontend/src/App.jsx`. `AuthProvider` consulta `/auth/me/` al iniciar; las rutas internas se muestran dentro de `Layout`, que redirige a `/login` cuando no hay sesión. La ruta inicial lleva al dashboard para `boss` y a la pantalla de evaluación para `collaborator`. `Layout.jsx` define el menú disponible para cada rol.
+El frontend es una SPA React con rutas en `frontend/src/App.jsx`. `AuthProvider` consulta `/auth/me/` al iniciar; las rutas internas se muestran dentro de `Layout`, que redirige a `/login` cuando no hay sesión, muestra solo "Cambia tu contraseña" si la cuenta tiene la contraseña inicial y cierra la sesión tras `VITE_IDLE_TIMEOUT_MINUTES` (15) sin actividad. La ruta inicial lleva al dashboard para `boss`/`superadmin` y a la pantalla de evaluación para `collaborator`. `Layout.jsx` define el menú de cada rol: el coordinador ve además "Evaluar" y "Autoevaluación"; el superadmin ve el submenú "Usuarios" (Administrar / Crear usuario). Todos tienen el ícono de llave "Cambiar contraseña".
 
 ### Páginas y roles
 
@@ -296,19 +307,23 @@ El frontend es una SPA React con rutas en `frontend/src/App.jsx`. `AuthProvider`
 | --- | --- | --- |
 | `frontend/src/pages/LoginPage.jsx` | `/login` | Inicio de sesión. |
 | `frontend/src/pages/DashboardPage.jsx` | `/` | Indicadores y promedios para jefes de área. |
-| `frontend/src/pages/EvaluationPage.jsx` | `/evaluations` | Selección de evaluación abierta y envío de calificaciones por colaboradores. |
-| `frontend/src/pages/ReviewPage.jsx` | `/review` | Revisión de evaluaciones enviadas y consulta de su detalle. |
-| `frontend/src/pages/ResultsPage.jsx` | `/results` | Resultados filtrables por evaluación, área y persona. |
+| `frontend/src/pages/EvaluationPage.jsx` | `/evaluations`, `/self-evaluation` | Evaluar (grupales) y Autoevaluación (individuales); colaboradores y coordinadores. |
+| `frontend/src/pages/ReviewPage.jsx` | (modal) | Detalle de las evaluaciones de una persona, abierto desde Resultados. |
+| `frontend/src/pages/ResultsPage.jsx` | `/results` | Resultados por tipo de programación, evaluación, área, persona, cargo y fechas; resultado cualitativo; "Limpiar filtros"; exportar a Excel. |
 | `frontend/src/pages/FormCreatePage.jsx` | `/create` | Creación y edición de formularios, categorías y preguntas. |
-| `frontend/src/pages/FormProgramPage.jsx` | `/program` | Configuración del límite mensual y tipo de calificación de una evaluación. |
-| `frontend/src/pages/EvaluationsListPage.jsx` | `/evaluations-list` | Estado, cierre y administración de evaluaciones existentes. |
-| `frontend/src/pages/StaffImportPage.jsx` | `/staff` | Carga de personal y formularios desde archivos. |
+| `frontend/src/pages/FormProgramPage.jsx` | `/program`, `/program/individual` | Programar evaluaciones grupales o individuales (autoevaluación). |
+| `frontend/src/pages/EvaluationsListPage.jsx` | `/evaluations-list` | Estado, avance, cierre y edición de programaciones. |
+| `frontend/src/pages/UsersAdminPage.jsx` | `/users` | Superadmin: rol, inhabilitar y restablecer contraseña. |
+| `frontend/src/pages/CreateUserPage.jsx` | `/users/create` | Superadmin: crear una cuenta con la contraseña inicial. |
+| `frontend/src/pages/ChangePasswordPage.jsx` | `/account/password` | Cualquier usuario: cambiar su contraseña (también la pantalla obligatoria del primer ingreso). |
+| `frontend/src/pages/StaffImportPage.jsx` | `/staff` | Superadmin: carga de personal (con plantilla descargable). |
 
 Las rutas del menú se configuran en `components/Layout.jsx`; al agregar una pantalla, actualizar `App.jsx` y revisar también los enlaces por rol en el layout. Los componentes de interfaz reutilizables están en `components/ui/`; estilos compartidos de formularios, alertas y títulos en `components/ui/styles.js`. `components/ScoreTable.jsx` representa los criterios cuantitativos o descriptivos.
 
 ### Sesión y comunicación con la API
 
-- `context/AuthContext.jsx` mantiene usuario, carga inicial, login y logout.
+- `context/AuthContext.jsx` mantiene usuario, carga inicial, login, logout y `updateUser` (p. ej. tras cambiar la contraseña).
+- `lib/useIdleLogout.js` cierra la sesión por inactividad (capa 20); la actividad se comparte entre pestañas.
 - `lib/api.js` es el cliente común: usa `credentials: 'include'`, envía el token CSRF en mutaciones, serializa JSON y renueva una sesión vencida una vez.
 - El backend entrega access y refresh como cookies httpOnly. No guardar tokens de sesión en `localStorage` ni hacer `fetch` directo para endpoints autenticados; usar `api()`.
 - En desarrollo y producción, `lib/api.js` llama a `/api/v1` en el mismo origen del frontend. Vite reenvía `/api` al backend Docker local usando `VITE_API_URL`; Render reescribe `/api/*` hacia Django en producción. Así las cookies de autenticación son first-party.
@@ -385,11 +400,55 @@ El Compose de producción no incluye el frontend: servir el `dist/` generado por
 - Revisar seguridad de permisos en `backend/common/permissions.py` y en las vistas antes de exponer nuevas acciones.
 - Mantener datos de ejemplo sintéticos y fuera de los despliegues productivos.
 
+## Seguridad (25 capas)
+
+Una clínica requiere como mínimo 7 capas de seguridad; este proyecto implementa 25. La guía para probar cada una a mano, con pasos y resultado esperado, está en [`reportes_pruebas_QA/PRUEBAS_MANUALES_SEGURIDAD.txt`](reportes_pruebas_QA/PRUEBAS_MANUALES_SEGURIDAD.txt).
+
+| # | Capa | Dónde |
+| --- | --- | --- |
+| 1 | Política de contraseñas | `AUTH_PASSWORD_VALIDATORS` |
+| 2 | Hash PBKDF2 con sal | Django |
+| 3 | Bloqueo por fuerza bruta (usuario + IP) | django-axes, `LoginView` |
+| 4 | Límite de peticiones | `DEFAULT_THROTTLE_RATES` |
+| 5 | Tokens en cookies httpOnly / Secure / SameSite | `users/views.py`, `AUTH_COOKIE_*` |
+| 6 | Rotación y lista negra de refresh tokens | `SIMPLE_JWT`, refresh/logout |
+| 7 | Sesión ligada al dispositivo | `users/devices.py`, `enforce_device` |
+| 8 | CSRF (doble cookie) | `common/authentication.py` |
+| 9 | Control de acceso por rol en el servidor | `common/permissions.py` |
+| 10 | Filtro de entradas maliciosas + ORM parametrizado | `MaliciousInputMiddleware` |
+| 11 | Cabeceras de seguridad y CSP | `frontend/nginx/security-headers.conf`, settings |
+| 12 | HTTPS obligatorio + HSTS | `prod.py` |
+| 13 | CORS / orígenes de confianza exactos | `CORS_ALLOWED_ORIGINS`, `CSRF_TRUSTED_ORIGINS` |
+| 14 | Registro estructurado de auditoría y seguridad | `audit/logging.py` (+ Sentry si hay `SENTRY_DSN`) |
+| 15 | Minimización de información expuesta | nginx `server_tokens off`, `DEBUG=False`, mensajes genéricos |
+| 16 | Gestión de secretos | variables de entorno; `prod.py` exige `DJANGO_SECRET_KEY` ≥ 50 |
+| 17 | Bloqueo de ventanas privadas | `lib/privateMode.js`, `common/navigation.py` |
+| 18 | Contraseña inicial con cambio obligatorio | `enforce_password_change`, `PasswordChangeView` |
+| 19 | Ciclo de vida de cuentas (inhabilitar, ≥1 superadmin) | `AdminUsersView` |
+| 20 | Cierre de sesión por inactividad | `frontend/src/lib/useIdleLogout.js` |
+| 21 | Revocación de sesiones al cambiar la contraseña | `users/sessions.py` |
+| 22 | Respuestas de la API sin caché (`no-store`) | `NoStoreApiMiddleware` |
+| 23 | Auditoría persistente de solo inserción | `audit/models.py` `AuditEvent` |
+| 24 | Validación de archivos subidos | `common/uploads.py` |
+| 25 | Escaneo de vulnerabilidades en dependencias | `.github/workflows/*-ci.yml` (pip-audit, npm audit) |
+
+Las capas 20 a 25 se agregaron el 2026-11-19. Al activar la capa 25 se actualizaron `djangorestframework` 3.18.0 → 3.18.2 y `daphne` 4.2.1 → 4.2.2 por vulnerabilidades conocidas.
+
+**Pendientes que no dependen solo del código** (detalle en la guía de pruebas): copias de seguridad de la base de Render (plan gratuito, vence el 2026-12-10), el mensaje "Usuario no encontrado" del login (revela qué documentos existen), la IP tomada del primer valor de `X-Forwarded-For`, el aviso de `xlsx` en npm, el contenedor del backend como root y la ruta por defecto de `/admin/`.
+
 ## Pruebas y calidad
 
-Backend: las dependencias de desarrollo incluyen `pytest` y `pytest-django`; revisar `backend/users/tests.py` y `backend/questions/tests/`. Ejecutar pruebas dentro del contenedor de desarrollo cuando se requiera.
+Backend (dentro del contenedor):
 
-Frontend: `npm run lint` ejecuta ESLint y `npm run build` compila la aplicación.
+```powershell
+docker exec heroes_del_corazon_pabon-backend-1 python manage.py test questions.tests users --settings=config.settings.test
+```
+
+Se indica `questions.tests` (el paquete) porque en `questions/` conviven `tests.py` y `tests/`, y la etiqueta `questions` sola no se puede importar. Las pruebas de las capas de seguridad están en `users/test_security.py`, `users/test_security_layers.py` y `users/test_password_change.py`.
+
+Frontend: `npx vitest run` ejecuta las pruebas, `npm run lint` ESLint y `npm run build` compila la aplicación.
+
+CI (GitHub Actions): `backend-ci.yml` (lint, pruebas y `pip-audit`) y `frontend-ci.yml` (pruebas y `npm audit`).
 
 ## Documentos relacionados
 

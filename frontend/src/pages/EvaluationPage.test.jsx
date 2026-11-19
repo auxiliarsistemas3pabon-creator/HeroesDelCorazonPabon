@@ -15,7 +15,7 @@ const people = Array.from({ length: 24 }, (_, index) => ({
 describe('EvaluationPage', () => {
   beforeEach(() => {
     mockApi.mockImplementation((path) => {
-      if (path === '/questions/evaluations/') return Promise.resolve([{
+      if (path === '/questions/evaluations/?participant=1') return Promise.resolve([{
         id: 10, name: 'Evaluación de prueba', areas: null, rating_type: 'quantitative',
         random_selection: false, remaining: 30, closes_on: null,
       }])

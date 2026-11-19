@@ -20,7 +20,7 @@ const colleagues = [{ id: 20, first_name: 'Compañera', last_name: 'Área', area
 describe('EvaluationPage: módulos del colaborador', () => {
   beforeEach(() => {
     mockApi.mockImplementation((path) => {
-      if (path === '/questions/evaluations/') return Promise.resolve(EVALUATIONS)
+      if (path === '/questions/evaluations/?participant=1') return Promise.resolve(EVALUATIONS)
       if (path.startsWith('/questions/form/')) return Promise.resolve([{ name: 'C', criteria: [{ code: 'c1', name: 'Pregunta' }] }])
       if (path === '/users/collaborators/') return Promise.resolve(colleagues)
       if (path.startsWith('/questions/quota/')) return Promise.resolve({ limit: 1, used: 0, personal: [], assigned: null })
@@ -56,7 +56,7 @@ describe('EvaluationPage: módulos del colaborador', () => {
 
   it('autoevaluación ya respondida: solo el aviso de realizada', async () => {
     mockApi.mockImplementation((path) => {
-      if (path === '/questions/evaluations/') return Promise.resolve(EVALUATIONS)
+      if (path === '/questions/evaluations/?participant=1') return Promise.resolve(EVALUATIONS)
       if (path.startsWith('/questions/form/')) return Promise.resolve([{ name: 'C', criteria: [{ code: 'c1', name: 'Pregunta' }] }])
       if (path.startsWith('/questions/quota/')) return Promise.resolve({ limit: 1, used: 1, personal: [me.id], assigned: null })
       return Promise.resolve([])
@@ -75,7 +75,7 @@ describe('EvaluationPage: módulos del colaborador', () => {
   })
 
   it('sin individuales abiertas avisa en su propio módulo', async () => {
-    mockApi.mockImplementation((path) => Promise.resolve(path === '/questions/evaluations/' ? [EVALUATIONS[0]] : []))
+    mockApi.mockImplementation((path) => Promise.resolve(path === '/questions/evaluations/?participant=1' ? [EVALUATIONS[0]] : []))
     render(<EvaluationPage kind="self" />)
     expect(await screen.findByText('No hay autoevaluaciones abiertas en este momento.')).toBeInTheDocument()
   })
